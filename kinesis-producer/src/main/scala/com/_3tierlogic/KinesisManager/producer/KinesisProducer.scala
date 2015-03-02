@@ -9,16 +9,15 @@ import scala.collection.immutable.StringOps
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
+import scala.language.postfixOps
 
 import com._3tierlogic.KinesisManager.Configuration
-import com._3tierlogic.KinesisManager.protocol.Put
-import com._3tierlogic.KinesisManager.protocol.Start
-import com._3tierlogic.KinesisManager.protocol.Started
-import com._3tierlogic.KinesisManager.protocol.StartFailed
 import com._3tierlogic.KinesisManager.MessageEnvelope
 import com._3tierlogic.KinesisManager.MessagePart
-
-
+import com._3tierlogic.KinesisManager.protocol.Put
+import com._3tierlogic.KinesisManager.protocol.Start
+import com._3tierlogic.KinesisManager.protocol.StartFailed
+import com._3tierlogic.KinesisManager.protocol.Started
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model.CreateStreamRequest
 import com.amazonaws.services.kinesis.model.DescribeStreamRequest

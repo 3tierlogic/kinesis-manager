@@ -3,7 +3,7 @@ package com._3tierlogic.KinesisManager
 import scala.collection.JavaConversions._
 
 
-object Environment extends Logging {
+object Environment extends LogbackLogging {
   
   val environment = System.getenv
   

@@ -4,7 +4,6 @@ import akka.actor.Actor
 import akka.actor.ActorSystem
 import akka.actor.Props
 
-
 import com._3tierlogic.KinesisManager.protocol._
 
 /** Akka Service Kernel Bootable
@@ -22,7 +21,6 @@ class Service extends akka.kernel.Bootable with Configuration {
   
   // Create the root actor of our system, that supervises all the others.
   lazy val rootSupervisor = actorSystem.actorOf(Props[RootSupervisor], "RootSupervisor")
-
 
   def startup = {
     rootSupervisor ! Start

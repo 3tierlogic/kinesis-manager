@@ -1,27 +1,25 @@
 package com._3tierlogic.KinesisManager
 
-import spray.can.Http
-
-import akka._
-import akka.actor._
-import akka.actor.OneForOneStrategy
-import akka.actor.SupervisorStrategy._
-import akka.actor.Actor._
-import akka.event.Logging
-import akka.io.IO
-import scala.concurrent.duration._
-
-import com._3tierlogic.KinesisManager.protocol.Start
-import com._3tierlogic.KinesisManager.protocol.Started
-import com._3tierlogic.KinesisManager.protocol.StartFailed
-
-import com.typesafe.config
-
 import java.lang.management.ManagementFactory
 
-import org.fusesource.jansi.Ansi._
-import org.fusesource.jansi.Ansi.Color._
+import scala.concurrent.duration.DurationInt
+import scala.language.postfixOps
 
+import com._3tierlogic.KinesisManager.protocol.Start
+import com._3tierlogic.KinesisManager.protocol.StartFailed
+import com._3tierlogic.KinesisManager.protocol.Started
+
+import akka.actor.Actor
+import akka.actor.ActorLogging
+import akka.actor.OneForOneStrategy
+import akka.actor.Props
+import akka.actor.SupervisorStrategy.Escalate
+import akka.actor.SupervisorStrategy.Restart
+import akka.actor.SupervisorStrategy.Resume
+import akka.actor.SupervisorStrategy.Stop
+import akka.actor.actorRef2Scala
+import akka.io.IO
+import spray.can.Http
 
 /**
  * Root of the Actor Supervisors
@@ -30,8 +28,6 @@ import org.fusesource.jansi.Ansi.Color._
  * 
  * @see [[http://spray.io/documentation/1.1-M8/spray-can/http-server/ Spray Can Documentation]]
  */
-
-
 class RootSupervisor extends Actor with ActorLogging with Configuration {
   
   override val supervisorStrategy =
