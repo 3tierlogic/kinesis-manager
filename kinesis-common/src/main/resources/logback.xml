@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- 
+  Logback Configuration for Platform3
+  
+  See http://logback.qos.ch/
+  
+  This file is the main Logback configuration for all Platform3 Applications and Services.
+  platform3/p3-util/src/test/resources/logback-test.xml is used to configure logging under test.
+  
+  Every Platform3 Application and Service should depend on p3-util so that these important
+  configuration files are on the classpath.
+  
+  author: Eric Kolotyluk
+ -->
+<configuration> 
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <!-- %coloredLevel is a Play thing, not a Logback thing -->
+      <!-- <pattern>%coloredLevel [%date{ISO8601}] [%thread] [%logger] %message%n%xException</pattern> -->
+      <!-- conform to Akka pattern for now -->
+      <pattern>%-6level [%date{ISO8601}] [%thread] [%logger] %message%n%xException</pattern>
+    </encoder>
+  </appender>
+  
+<!--   <appender name="Sentry" class="net.kencochrane.raven.logback.SentryAppender"> -->
+<!--     <dsn>naive+https://fd5ccd5269544cd1a42ca73d1330c2f5:32a5406c8d9f4ba5908e9af59c378227@app.getsentry.com/22262</dsn> -->
+<!--     <tags>instaceType:p3-s-accounts</tags> -->
+<!--     Optional, allows to select the ravenFactory -->
+<!--     <ravenFactory>net.kencochrane.raven.getsentry.GetSentryRavenFactory</ravenFactory> -->
+<!--     <filter class="ch.qos.logback.classic.filter.ThresholdFilter"> -->
+<!--       <level>ERROR</level> -->
+<!--     </filter> -->
+<!--   </appender> -->
+  
+<!--   <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender"> -->
+<!--     <prudent>true</prudent> -->
+<!--     <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy"> -->
+<!--       <fileNamePattern>logs/platform3-%d{yyyy-MM-dd}.log</fileNamePattern> -->
+<!--       <maxHistory>30</maxHistory> -->
+<!--     </rollingPolicy> -->
+<!--     <append>true</append> -->
+<!--     <encoder> -->
+<!--       <pattern>%-5level [%date{ISO8601}] [%thread] [%logger] %message%n%xException</pattern> -->
+<!--     </encoder> -->
+<!--   </appender> -->
+
+  <root level="INFO">
+    <appender-ref ref="STDOUT"/>
+<!--     <appender-ref ref="Sentry"/> -->
+<!--     <appender-ref ref="FILE"/> -->
+  </root>
+    
+  <logger name="Logback" level="INFO"/>
+</configuration>

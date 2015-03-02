@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project
+    xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+  
+  <groupId>com.3tierlogic</groupId>
+  <artifactId>kinesis-manager</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>Kinesis Manager</name>
+  <description>A high level manager service for Kinesis Streams.</description>
+  
+  <modules>
+    <module>kinesis-common</module>
+    <module>kinesis-producer</module>
+    <module>kinesis-consumer</module>
+  </modules>
+    
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.resources.sourceEncoding>UTF-8</project.resources.sourceEncoding>
+    <scala.version>2.11.5</scala.version>
+  </properties>
+  
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+      <comments>A business-friendly OSS license</comments>
+    </license>
+  </licenses>
+  
+  <organization>
+    <name>3 Tier Logic</name>
+    <url>http://3tierlogic.com</url>
+  </organization>
+  
+  <developers>
+    <developer>
+      <id>ekolotyluk</id>
+      <name>Eric Kolotyluk</name>
+      <email>ekolotyluk@3tierlogic.com</email>
+      <url>https://plus.google.com/104587833671883088971/about</url>
+      <organization>3 Tier Logic</organization>
+      <organizationUrl>http://3tierlogic.com</organizationUrl>
+      <roles>
+        <role>architect</role>
+        <role>developer</role>
+      </roles>
+      <timezone>America/Vancouver</timezone>
+      <properties>
+        <picUrl>https://lh3.googleusercontent.com/OnAKl18wd5x58ZmqEqJiGY0q7BjFo4nwuhVNRkRQ=s207-p-no</picUrl>
+      </properties>
+    </developer>
+  </developers>
+  
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+    	<groupId>ch.qos.logback</groupId>
+    	<artifactId>logback-classic</artifactId>
+    	<version>1.1.2</version>
+      </dependency>
+      <dependency>
+    	<groupId>com.3tierlogic.KinesisManager</groupId>
+    	<artifactId>kinesis-common</artifactId>
+    	<version>0.0.1-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+    	<groupId>com.amazonaws</groupId>
+    	<artifactId>aws-java-sdk</artifactId>
+    	<version>1.9.21</version>
+      </dependency>
+      <dependency>
+    	<groupId>com.typesafe.akka</groupId>
+    	<artifactId>akka-kernel_2.11</artifactId>
+    	<version>2.3.9</version>
+      </dependency>
+      <dependency>
+        <groupId>junit</groupId>
+        <artifactId>junit</artifactId>
+        <version>4.4</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scala-library</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.specs</groupId>
+        <artifactId>specs</artifactId>
+        <version>1.2.5</version>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+</project>
