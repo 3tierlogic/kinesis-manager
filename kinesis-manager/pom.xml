@@ -1,0 +1,74 @@
+<project
+  xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  
+  <modelVersion>4.0.0</modelVersion>
+  
+  <parent>
+    <groupId>com.3tierlogic.kinesis</groupId>
+    <artifactId>manager</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <relativePath>..</relativePath>
+  </parent>
+  
+  <groupId>com.3tierlogic.kinesis.manager</groupId>
+  <artifactId>kinesis-manager</artifactId>
+  
+  <dependencies>
+  	<dependency>
+  		<groupId>com.3tierlogic.kinesis.manager</groupId>
+  		<artifactId>kinesis-common</artifactId>
+  	</dependency>
+  	<dependency>
+  		<groupId>com.3tierlogic.kinesis.manager</groupId>
+  		<artifactId>kinesis-consumer</artifactId>
+  	</dependency>
+  	<dependency>
+  		<groupId>com.3tierlogic.kinesis.manager</groupId>
+  		<artifactId>kinesis-producer</artifactId>
+  	</dependency>
+  </dependencies>
+  
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>2.3</version>
+        <!-- see also http://doc.akka.io/docs/akka/snapshot/general/configuration.html -->
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+	        <configuration>
+<!-- 	          <shadedArtifactAttached>true</shadedArtifactAttached> -->
+<!-- 	          <shadedClassifierName>allinone</shadedClassifierName> -->
+	          <artifactSet>
+	            <includes>
+	              <include>*:*</include>
+	            </includes>
+	          </artifactSet>
+	          <transformers>
+	            <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+	              <!-- Note: you can only ever have one resource defined per appending transformer -->
+	              <resource>reference.conf</resource>
+	            </transformer>
+	            <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+	              <manifestEntries>
+<!-- 	                <Main-Class>akka.Main</Main-Class> -->
+	                <Main-Class>com._3tierlogic.KinesisManager.service.Service</Main-Class>
+	              </manifestEntries>
+	            </transformer>
+	          </transformers>
+	        </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+  
+  <description>Executable jar</description>
+</project>

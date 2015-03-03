@@ -7,14 +7,15 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>com.3tierlogic</groupId>
-    <artifactId>kinesis-manager</artifactId>
+    <groupId>com.3tierlogic.kinesis</groupId>
+    <artifactId>manager</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <relativePath>..</relativePath>
   </parent>
 
-  <groupId>com.3tierlogic.KinesisManager</groupId>
+  <groupId>com.3tierlogic.kinesis.manager</groupId>
   <artifactId>kinesis-common</artifactId>
+  
   <inceptionYear>2015</inceptionYear>
   
   <dependencies>

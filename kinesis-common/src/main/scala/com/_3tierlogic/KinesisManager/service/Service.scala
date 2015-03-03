@@ -1,9 +1,10 @@
-package com._3tierlogic.KinesisManager
+package com._3tierlogic.KinesisManager.service
 
 import akka.actor.Actor
 import akka.actor.ActorSystem
 import akka.actor.Props
 
+import com._3tierlogic.KinesisManager.Configuration
 import com._3tierlogic.KinesisManager.protocol._
 
 /** Akka Service Kernel Bootable

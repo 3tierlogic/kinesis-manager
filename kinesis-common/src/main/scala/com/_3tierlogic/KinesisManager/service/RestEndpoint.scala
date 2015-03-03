@@ -1,4 +1,4 @@
-package com._3tierlogic.KinesisManager
+package com._3tierlogic.KinesisManager.service
 
 import akka.actor.Actor
 import akka.actor.ActorLogging

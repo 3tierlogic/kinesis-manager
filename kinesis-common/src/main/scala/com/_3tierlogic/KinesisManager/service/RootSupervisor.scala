@@ -1,10 +1,11 @@
-package com._3tierlogic.KinesisManager
+package com._3tierlogic.KinesisManager.service
 
 import java.lang.management.ManagementFactory
 
 import scala.concurrent.duration.DurationInt
 import scala.language.postfixOps
 
+import com._3tierlogic.KinesisManager.Configuration
 import com._3tierlogic.KinesisManager.protocol.Start
 import com._3tierlogic.KinesisManager.protocol.StartFailed
 import com._3tierlogic.KinesisManager.protocol.Started

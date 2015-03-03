@@ -7,18 +7,30 @@
   <modelVersion>4.0.0</modelVersion>
   
   <parent>
-    <groupId>com.3tierlogic</groupId>
-    <artifactId>kinesis-manager</artifactId>
+    <groupId>com.3tierlogic.kinesis</groupId>
+    <artifactId>manager</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <relativePath>..</relativePath>
   </parent>
   
-  <groupId>com.3tierlogic.KinesisManager</groupId>
+  <groupId>com.3tierlogic.kinesis.manager</groupId>
   <artifactId>kinesis-consumer</artifactId>
   
   <inceptionYear>2015</inceptionYear>
   
   <dependencies>
+    <dependency>
+      <groupId>com.3tierlogic.kinesis.manager</groupId>
+      <artifactId>kinesis-common</artifactId>
+    </dependency>
+    <dependency>
+    	<groupId>com.amazonaws</groupId>
+    	<artifactId>aws-java-sdk</artifactId>
+    </dependency>
+    <dependency>
+    	<groupId>com.typesafe.akka</groupId>
+    	<artifactId>akka-kernel_2.11</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
@@ -32,18 +44,6 @@
       <groupId>org.specs</groupId>
       <artifactId>specs</artifactId>
       <scope>test</scope>
-    </dependency>
-    <dependency>
-    	<groupId>com.amazonaws</groupId>
-    	<artifactId>aws-java-sdk</artifactId>
-    </dependency>
-    <dependency>
-    	<groupId>com.typesafe.akka</groupId>
-    	<artifactId>akka-kernel_2.11</artifactId>
-    </dependency>
-    <dependency>
-    	<groupId>com.3tierlogic.KinesisManager</groupId>
-    	<artifactId>kinesis-common</artifactId>
     </dependency>
   </dependencies>
 
