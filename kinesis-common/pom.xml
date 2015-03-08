@@ -44,22 +44,12 @@
       <artifactId>spray-routing_2.11</artifactId>
     </dependency>
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>org.fusesource.jansi</groupId>
       <artifactId>jansi</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.specs</groupId>
-      <artifactId>specs</artifactId>
-      <scope>test</scope>
     </dependency>
   </dependencies>
 

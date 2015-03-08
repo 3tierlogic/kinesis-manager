@@ -35,16 +35,6 @@
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
     </dependency>
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.specs</groupId>
-      <artifactId>specs</artifactId>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
 
   <build>

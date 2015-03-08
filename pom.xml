@@ -124,12 +124,6 @@
     	<version>1.3.2</version>
       </dependency>
       <dependency>
-        <groupId>junit</groupId>
-        <artifactId>junit</artifactId>
-        <version>4.4</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
     	<groupId>org.fusesource.jansi</groupId>
     	<artifactId>jansi</artifactId>
     	<version>1.11</version>
@@ -139,19 +133,43 @@
         <artifactId>scala-library</artifactId>
         <version>${scala.version}</version>
       </dependency>
-      <dependency>
-        <groupId>org.specs</groupId>
-        <artifactId>specs</artifactId>
-        <version>1.2.5</version>
-        <scope>test</scope>
-      </dependency>
     </dependencies>
   </dependencyManagement>
   
   <build>
     <pluginManagement>
       <plugins>
-        <plugin>
+
+          <!-- http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin -->
+          <!-- disable surefire -->
+          <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-surefire-plugin</artifactId>
+              <version>2.7</version>
+            <configuration>
+              <skipTests>true</skipTests>
+            </configuration>
+          </plugin>
+          <!-- enable scalatest -->
+          <plugin>
+            <groupId>org.scalatest</groupId>
+            <artifactId>scalatest-maven-plugin</artifactId>
+            <version>1.0</version>
+            <configuration>
+              <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
+              <junitxml>.</junitxml>
+            </configuration>
+            <executions>
+              <execution>
+                <id>test</id>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-eclipse-plugin</artifactId>
           <version>2.9</version>
@@ -191,6 +209,7 @@
           </configuration>
         </plugin>
       </plugins>
+
     </pluginManagement>
     
     <plugins>

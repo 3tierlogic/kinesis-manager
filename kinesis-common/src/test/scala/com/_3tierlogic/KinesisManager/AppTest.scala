@@ -1,17 +1,11 @@
 package com._3tierlogic.KinesisManager
+import org.scalatest.FunSuite
 
-import org.junit._
-import Assert._
+class AppTest extends FunSuite {
 
-@Test
-class AppTest {
-
-    @Test
-    def testOK() = assertTrue(true)
-
-//    @Test
-//    def testKO() = assertTrue(false)
-
+	test("test 2 expected values are equal") {
+    	assert(2 === 2)
+  	}
 }
 
 
