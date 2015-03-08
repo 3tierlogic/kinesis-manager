@@ -9,6 +9,7 @@ See also the wiki
 
 * Maven
   * 3.2.3
+  * The [maven-wrapper]((https://github.com/bdemers/maven-wrapper) is included
 * Java
   * 1.8
 * Scala
