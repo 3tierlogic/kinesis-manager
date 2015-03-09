@@ -16,8 +16,6 @@
   <groupId>com.3tierlogic.kinesis.manager</groupId>
   <artifactId>kinesis-common</artifactId>
   
-  <inceptionYear>2015</inceptionYear>
-  
   <dependencies>
     <dependency>
       <groupId>ch.qos.logback</groupId>
@@ -53,20 +51,5 @@
     </dependency>
   </dependencies>
 
-  <build>
-    <plugins>
-    </plugins>
-  </build>
 
-  <reporting>
-    <plugins>
-      <plugin>
-        <groupId>org.scala-tools</groupId>
-        <artifactId>maven-scala-plugin</artifactId>
-        <configuration>
-          <scalaVersion>${scala.version}</scalaVersion>
-        </configuration>
-      </plugin>
-    </plugins>
-  </reporting>
 </project>

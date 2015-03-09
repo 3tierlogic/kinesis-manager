@@ -13,8 +13,9 @@
 
   <name>Kinesis Manager</name>
   <description>A high level manager service for Kinesis Streams.</description>
-  
-  <modules>
+    <inceptionYear>2015</inceptionYear>
+
+    <modules>
     <module>kinesis-common</module>
     <module>kinesis-producer</module>
     <module>kinesis-consumer</module>
@@ -25,6 +26,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.resources.sourceEncoding>UTF-8</project.resources.sourceEncoding>
     <scala.version>2.11.5</scala.version>
+      <scala.binary.version>2.11</scala.binary.version>
   </properties>
   
   <licenses>
@@ -133,15 +135,31 @@
         <artifactId>scala-library</artifactId>
         <version>${scala.version}</version>
       </dependency>
+        <dependency>
+            <groupId>org.scalatest</groupId>
+            <artifactId>scalatest_${scala.binary.version}</artifactId>
+            <version>2.2.1</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
   </dependencyManagement>
-  
+
+    <dependencies>
+        <!-- Every module NEEDS ScalaTest -->
+        <dependency>
+            <groupId>org.scalatest</groupId>
+            <artifactId>scalatest_${scala.binary.version}</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
   <build>
     <pluginManagement>
+
       <plugins>
 
           <!-- http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin -->
-          <!-- disable surefire -->
+          <!-- Disable Surefire (as suggested at the page at the link above)-->
           <plugin>
               <groupId>org.apache.maven.plugins</groupId>
               <artifactId>maven-surefire-plugin</artifactId>
@@ -150,7 +168,7 @@
               <skipTests>true</skipTests>
             </configuration>
           </plugin>
-          <!-- enable scalatest -->
+          <!-- Enable ScalaTest -->
           <plugin>
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest-maven-plugin</artifactId>
@@ -170,23 +188,24 @@
           </plugin>
 
           <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-eclipse-plugin</artifactId>
-          <version>2.9</version>
-          <configuration>
-            <downloadSources>true</downloadSources>
-            <buildcommands>
-              <buildcommand>ch.epfl.lamp.sdt.core.scalabuilder</buildcommand>
-            </buildcommands>
-            <additionalProjectnatures>
-              <projectnature>ch.epfl.lamp.sdt.core.scalanature</projectnature>
-            </additionalProjectnatures>
-            <classpathContainers>
-              <classpathContainer>org.eclipse.jdt.launching.JRE_CONTAINER</classpathContainer>
-              <classpathContainer>ch.epfl.lamp.sdt.launching.SCALA_CONTAINER</classpathContainer>
-            </classpathContainers>
-          </configuration>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-eclipse-plugin</artifactId>
+              <version>2.9</version>
+              <configuration>
+                <downloadSources>true</downloadSources>
+                <buildcommands>
+                  <buildcommand>ch.epfl.lamp.sdt.core.scalabuilder</buildcommand>
+                </buildcommands>
+                <additionalProjectnatures>
+                  <projectnature>ch.epfl.lamp.sdt.core.scalanature</projectnature>
+                </additionalProjectnatures>
+                <classpathContainers>
+                  <classpathContainer>org.eclipse.jdt.launching.JRE_CONTAINER</classpathContainer>
+                  <classpathContainer>ch.epfl.lamp.sdt.launching.SCALA_CONTAINER</classpathContainer>
+                </classpathContainers>
+              </configuration>
         </plugin>
+
         <plugin>
           <groupId>org.scala-tools</groupId>
           <artifactId>maven-scala-plugin</artifactId>
@@ -208,19 +227,27 @@
             </args>
           </configuration>
         </plugin>
+
       </plugins>
 
     </pluginManagement>
-    
-    <plugins>
-      <plugin>
-        <artifactId>maven-eclipse-plugin</artifactId>
-      </plugin>
-      <plugin>
-        <groupId>org.scala-tools</groupId>
-        <artifactId>maven-scala-plugin</artifactId>
-      </plugin>
-    </plugins>
+
+      <plugins>
+          <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-eclipse-plugin</artifactId>
+          </plugin>
+          <plugin>
+              <groupId>org.scala-tools</groupId>
+              <artifactId>maven-scala-plugin</artifactId>
+          </plugin>
+          <!-- Every module NEEDS ScalaTest -->
+          <plugin>
+              <groupId>org.scalatest</groupId>
+              <artifactId>scalatest-maven-plugin</artifactId>
+          </plugin>
+      </plugins>
+
   </build>
   
 </project>

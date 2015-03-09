@@ -15,8 +15,6 @@
   <groupId>com.3tierlogic.kinesis.manager</groupId>
   <artifactId>kinesis-producer</artifactId>
 
-  <inceptionYear>2015</inceptionYear>
-  
   <dependencies>
     <dependency>
     	<groupId>com.3tierlogic.kinesis.manager</groupId>
@@ -36,20 +34,5 @@
     </dependency>
   </dependencies>
 
-  <build>
-    <plugins>
-    </plugins>
-  </build>
 
-  <reporting>
-    <plugins>
-      <plugin>
-        <groupId>org.scala-tools</groupId>
-        <artifactId>maven-scala-plugin</artifactId>
-        <configuration>
-          <scalaVersion>${scala.version}</scalaVersion>
-        </configuration>
-      </plugin>
-    </plugins>
-  </reporting>
 </project>
