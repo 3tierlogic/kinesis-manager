@@ -141,6 +141,12 @@
                 <version>2.2.1</version>
                 <scope>test</scope>
             </dependency>
+            <dependency>
+                <groupId>org.scalacheck</groupId>
+                <artifactId>scalacheck_${scala.binary.version}</artifactId>
+                <version>1.12.2</version>
+                <scope>test</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -149,6 +155,12 @@
         <dependency>
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest_${scala.binary.version}</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Every module NEEDS ScalaCheck -->
+        <dependency>
+            <groupId>org.scalacheck</groupId>
+            <artifactId>scalacheck_${scala.binary.version}</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
