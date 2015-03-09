@@ -2,23 +2,16 @@ package com._3tierlogic.KinesisManager.consumer
 
 import java.util.UUID
 
+import akka.actor.{Actor, ActorLogging, ActorRef}
+import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, MessagePart}
+import com._3tierlogic.KinesisManager.protocol.Start
+import com.amazonaws.services.kinesis.AmazonKinesisClient
+import com.amazonaws.services.kinesis.model.{DescribeStreamRequest, DescribeStreamResult, GetRecordsRequest, GetShardIteratorRequest}
+
+import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
 import scala.language.postfixOps
-
-import com._3tierlogic.KinesisManager.Configuration
-import com._3tierlogic.KinesisManager.MessageEnvelope
-import com._3tierlogic.KinesisManager.MessagePart
-import com._3tierlogic.KinesisManager.protocol.Start
-import com.amazonaws.services.kinesis.AmazonKinesisClient
-import com.amazonaws.services.kinesis.model.DescribeStreamRequest
-import com.amazonaws.services.kinesis.model.DescribeStreamResult
-import com.amazonaws.services.kinesis.model.GetRecordsRequest
-import com.amazonaws.services.kinesis.model.GetShardIteratorRequest
-
-import akka.actor.Actor
-import akka.actor.ActorLogging
-import akka.actor.ActorRef
 
 /** Actor for Managing Kinesis Consumer Activity
   * 
@@ -69,8 +62,8 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       if (streamNameList.contains(streamName)) {
         log.info(s"Start: using $streamName")
           
-        val describeStreamRequest = new DescribeStreamRequest();
-        describeStreamRequest.setStreamName(streamName);
+        val describeStreamRequest = new DescribeStreamRequest()
+        describeStreamRequest.setStreamName(streamName)
   
         describeStreamResponse = amazonKinesisClient.describeStream(describeStreamRequest)
         val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
@@ -90,9 +83,9 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       val shards = describeStreamResponse.getStreamDescription.getShards
       val shard = shards.get(0)
           
-      val getShardIteratorRequest = new GetShardIteratorRequest();
-      getShardIteratorRequest.setStreamName(streamName);
-      getShardIteratorRequest.setShardId(shard.getShardId());
+      val getShardIteratorRequest = new GetShardIteratorRequest()
+      getShardIteratorRequest.setStreamName(streamName)
+      getShardIteratorRequest.setShardId(shard.getShardId())
       
       if (lastSequenceNumber == null)
         getShardIteratorRequest.setShardIteratorType("TRIM_HORIZON")
@@ -101,15 +94,15 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
         getShardIteratorRequest.setShardIteratorType("AFTER_SEQUENCE_NUMBER")
       }
   
-      val getShardIteratorResult = amazonKinesisClient.getShardIterator(getShardIteratorRequest);
-      val shardIterator = getShardIteratorResult.getShardIterator();
+      val getShardIteratorResult = amazonKinesisClient.getShardIterator(getShardIteratorRequest)
+      val shardIterator = getShardIteratorResult.getShardIterator()
         
-      val getRecordsRequest = new GetRecordsRequest();
-      getRecordsRequest.setShardIterator(shardIterator);
-      getRecordsRequest.setLimit(25);
+      val getRecordsRequest = new GetRecordsRequest()
+      getRecordsRequest.setShardIterator(shardIterator)
+      getRecordsRequest.setLimit(25)
         
-      val getRecordsResult = amazonKinesisClient.getRecords(getRecordsRequest);
-      val records = getRecordsResult.getRecords();
+      val getRecordsResult = amazonKinesisClient.getRecords(getRecordsRequest)
+      val records = getRecordsResult.getRecords()
         
       log.info("Start: got " + records.size() + " records")
       
@@ -132,7 +125,7 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
           
         ///////////////////////////////////
           
-        var partList = partMap.getOrElse(eventPart.uuid, scala.collection.mutable.Map[Long,MessagePart]())
+        var partList: mutable.Map[Long, MessagePart] = partMap.getOrElse(eventPart.uuid, scala.collection.mutable.Map[Long,MessagePart]())
           
         if (partList.size == 0) partMap(eventPart.uuid) = partList
           

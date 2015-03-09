@@ -1,34 +1,20 @@
 package com._3tierlogic.KinesisManager.producer
 
 import java.nio.ByteBuffer
-import java.util.ArrayList
-import java.util.UUID
+import java.util.{ArrayList, UUID}
 import java.util.concurrent.ConcurrentLinkedQueue
+
+import akka.actor.{Actor, ActorLogging, ActorRef, actorRef2Scala}
+import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, MessagePart}
+import com._3tierlogic.KinesisManager.protocol.{Put, Start, StartFailed, Started}
+import com.amazonaws.services.kinesis.AmazonKinesisClient
+import com.amazonaws.services.kinesis.model.{CreateStreamRequest, DescribeStreamRequest, PutRecordsRequest, PutRecordsRequestEntry, ResourceNotFoundException}
 
 import scala.collection.immutable.StringOps
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 import scala.language.postfixOps
-
-import com._3tierlogic.KinesisManager.Configuration
-import com._3tierlogic.KinesisManager.MessageEnvelope
-import com._3tierlogic.KinesisManager.MessagePart
-import com._3tierlogic.KinesisManager.protocol.Put
-import com._3tierlogic.KinesisManager.protocol.Start
-import com._3tierlogic.KinesisManager.protocol.StartFailed
-import com._3tierlogic.KinesisManager.protocol.Started
-import com.amazonaws.services.kinesis.AmazonKinesisClient
-import com.amazonaws.services.kinesis.model.CreateStreamRequest
-import com.amazonaws.services.kinesis.model.DescribeStreamRequest
-import com.amazonaws.services.kinesis.model.PutRecordsRequest
-import com.amazonaws.services.kinesis.model.PutRecordsRequestEntry
-import com.amazonaws.services.kinesis.model.ResourceNotFoundException
-
-import akka.actor.Actor
-import akka.actor.ActorLogging
-import akka.actor.ActorRef
-import akka.actor.actorRef2Scala
 
 /** Actor for Managing Kinesis Producer Activity
   * 
@@ -85,7 +71,9 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
   case class PutRecords(records: scala.collection.mutable.ArrayBuffer[Future[ByteBuffer]])
   
   val streamName = config.getString("kinesis-manager.stream.name")
-    
+
+  val describeStreamRequest = new DescribeStreamRequest().withStreamName(streamName)
+
   val client = new AmazonKinesisClient
   
   def getClient = client
@@ -95,9 +83,6 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
   var startTime: Long = 0
   var endTime: Long = 0
 
-  var describeStreamRequest: DescribeStreamRequest = null
-  
-          
   val messageEnvelopeQueue = new ConcurrentLinkedQueue[MessageEnvelope]
   val putRecordsRequestEntryQueue = new ConcurrentLinkedQueue[PutRecordsRequestEntry]
   
@@ -144,15 +129,12 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
         } else { 
           log.info(s"Start: creating stream $streamName")
             
-          val createStreamRequest = new CreateStreamRequest();
-          createStreamRequest.setStreamName(streamName);
-          createStreamRequest.setShardCount(1);
+          val createStreamRequest = new CreateStreamRequest()
+            .withStreamName(streamName)
+            .withShardCount(1)
 
           client.createStream(createStreamRequest)
         }
-        
-        describeStreamRequest = new DescribeStreamRequest();
-        describeStreamRequest.setStreamName(streamName);
 
         val describeStreamResponse = client.describeStream(describeStreamRequest)
         val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
@@ -177,6 +159,7 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
           }
     
         case exception: Exception =>
+          log.error(exception, "Your message")
           log.error("-------------" + exception.getMessage)
           log.error("-------------" + exception.getCause)
           log.error("-------------" + exception.getStackTrace.mkString("\n"))
@@ -306,9 +289,11 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
       val putRecordsRequestEntryList  = new ArrayList[PutRecordsRequestEntry]
 
       def putRecords = {
-        val putRecordsRequest = new PutRecordsRequest();
-        putRecordsRequest.setStreamName(streamName);
-        putRecordsRequest.setRecords(putRecordsRequestEntryList);
+
+        val putRecordsRequest = new PutRecordsRequest()
+          .withStreamName(streamName)
+          .withRecords(putRecordsRequestEntryList)
+
         val putTime = System.currentTimeMillis
         val putRecordsResult  = client.putRecords(putRecordsRequest)
         log.info("PulseBlocks: put " + putRecordsResult.getRecords.size() + " blocks in " + (System.currentTimeMillis - putTime) + " ms")
