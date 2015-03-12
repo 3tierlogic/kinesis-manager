@@ -1,66 +1,57 @@
 <?xml version="1.0"?>
 <project
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
-  xmlns="http://maven.apache.org/POM/4.0.0"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  
-  <modelVersion>4.0.0</modelVersion>
-  
-  <parent>
-    <groupId>com.3tierlogic.kinesis</groupId>
-    <artifactId>manager</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
-    <relativePath>..</relativePath>
-  </parent>
-  
-  <groupId>com.3tierlogic.kinesis.manager</groupId>
-  <artifactId>kinesis-consumer</artifactId>
-  
-  <inceptionYear>2015</inceptionYear>
-  
-  <dependencies>
-    <dependency>
-      <groupId>com.3tierlogic.kinesis.manager</groupId>
-      <artifactId>kinesis-common</artifactId>
-    </dependency>
-    <dependency>
-    	<groupId>com.amazonaws</groupId>
-    	<artifactId>aws-java-sdk</artifactId>
-    </dependency>
-    <dependency>
-    	<groupId>com.typesafe.akka</groupId>
-    	<artifactId>akka-kernel_2.11</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.scala-lang</groupId>
-      <artifactId>scala-library</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.specs</groupId>
-      <artifactId>specs</artifactId>
-      <scope>test</scope>
-    </dependency>
-  </dependencies>
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
+        xmlns="http://maven.apache.org/POM/4.0.0">
 
-  <build>
-    <plugins>
-    </plugins>
-  </build>
+    <modelVersion>4.0.0</modelVersion>
 
-  <reporting>
-    <plugins>
-      <plugin>
-        <groupId>org.scala-tools</groupId>
-        <artifactId>maven-scala-plugin</artifactId>
-        <configuration>
-          <scalaVersion>${scala.version}</scalaVersion>
-        </configuration>
-      </plugin>
-    </plugins>
-  </reporting>
+    <parent>
+        <groupId>com.3tierlogic.kinesis</groupId>
+        <artifactId>manager</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>..</relativePath>
+    </parent>
+
+    <groupId>com.3tierlogic.kinesis.manager</groupId>
+    <artifactId>kinesis-consumer</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.3tierlogic.kinesis.manager</groupId>
+            <artifactId>kinesis-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-kernel_2.11</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+        </dependency>
+    </dependencies>
+
+
+    <build>
+        <plugins>
+        </plugins>
+    </build>
+
+    <reporting>
+        <plugins>
+            <plugin>
+                <groupId>org.scala-tools</groupId>
+                <artifactId>maven-scala-plugin</artifactId>
+                <configuration>
+                    <scalaVersion>${scala.version}</scalaVersion>
+                </configuration>
+            </plugin>
+        </plugins>
+    </reporting>
+
+
 </project>

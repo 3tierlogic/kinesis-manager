@@ -1,207 +1,265 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project
-    xmlns="http://maven.apache.org/POM/4.0.0"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns="http://maven.apache.org/POM/4.0.0"
+        xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-  <modelVersion>4.0.0</modelVersion>
-  
-  <groupId>com.3tierlogic.kinesis</groupId>
-  <artifactId>manager</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
-  <packaging>pom</packaging>
+    <modelVersion>4.0.0</modelVersion>
 
-  <name>Kinesis Manager</name>
-  <description>A high level manager service for Kinesis Streams.</description>
-  
-  <modules>
-    <module>kinesis-common</module>
-    <module>kinesis-producer</module>
-    <module>kinesis-consumer</module>
-    <module>kinesis-manager</module>
-  </modules>
-    
-  <properties>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <project.resources.sourceEncoding>UTF-8</project.resources.sourceEncoding>
-    <scala.version>2.11.5</scala.version>
-  </properties>
-  
-  <licenses>
-    <license>
-      <name>Apache License, Version 2.0</name>
-      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-      <distribution>repo</distribution>
-      <comments>A business-friendly OSS license</comments>
-    </license>
-  </licenses>
-  
-  <organization>
-    <name>3 Tier Logic</name>
-    <url>http://3tierlogic.com</url>
-  </organization>
-  
-  <developers>
-    <developer>
-      <id>ekolotyluk</id>
-      <name>Eric Kolotyluk</name>
-      <email>ekolotyluk@3tierlogic.com</email>
-      <url>https://plus.google.com/104587833671883088971/about</url>
-      <organization>3 Tier Logic</organization>
-      <organizationUrl>http://3tierlogic.com</organizationUrl>
-      <roles>
-        <role>architect</role>
-        <role>developer</role>
-      </roles>
-      <timezone>America/Vancouver</timezone>
-      <properties>
-        <picUrl>https://lh3.googleusercontent.com/OnAKl18wd5x58ZmqEqJiGY0q7BjFo4nwuhVNRkRQ=s207-p-no</picUrl>
-      </properties>
-    </developer>
-  </developers>
+    <groupId>com.3tierlogic.kinesis</groupId>
+    <artifactId>manager</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
 
-  <repositories>
-    <repository>
-      <id>scala-tools.org</id>
-      <name>Scala-Tools Maven2 Repository</name>
-      <url>http://scala-tools.org/repo-releases</url>
-    </repository>
-  </repositories>
+    <name>Kinesis Manager</name>
+    <description>A high level manager service for Kinesis Streams.</description>
+    <inceptionYear>2015</inceptionYear>
 
-  <pluginRepositories>
-    <pluginRepository>
-      <id>scala-tools.org</id>
-      <name>Scala-Tools Maven2 Repository</name>
-      <url>http://scala-tools.org/repo-releases</url>
-    </pluginRepository>
-  </pluginRepositories>
-  
-  <dependencyManagement>
+    <modules>
+        <module>kinesis-common</module>
+        <module>kinesis-producer</module>
+        <module>kinesis-consumer</module>
+        <module>kinesis-manager</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.resources.sourceEncoding>UTF-8</project.resources.sourceEncoding>
+        <scala.version>2.11.5</scala.version>
+        <scala.binary.version>2.11</scala.binary.version>
+    </properties>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+            <comments>A business-friendly OSS license</comments>
+        </license>
+    </licenses>
+
+    <organization>
+        <name>3 Tier Logic</name>
+        <url>http://3tierlogic.com</url>
+    </organization>
+
+    <developers>
+        <developer>
+            <id>ekolotyluk</id>
+            <name>Eric Kolotyluk</name>
+            <email>ekolotyluk@3tierlogic.com</email>
+            <url>https://plus.google.com/104587833671883088971/about</url>
+            <organization>3 Tier Logic</organization>
+            <organizationUrl>http://3tierlogic.com</organizationUrl>
+            <roles>
+                <role>architect</role>
+                <role>developer</role>
+            </roles>
+            <timezone>America/Vancouver</timezone>
+            <properties>
+                <picUrl>https://lh3.googleusercontent.com/OnAKl18wd5x58ZmqEqJiGY0q7BjFo4nwuhVNRkRQ=s207-p-no</picUrl>
+            </properties>
+        </developer>
+    </developers>
+
+    <repositories>
+        <repository>
+            <id>scala-tools.org</id>
+            <name>Scala-Tools Maven2 Repository</name>
+            <url>http://scala-tools.org/repo-releases</url>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>scala-tools.org</id>
+            <name>Scala-Tools Maven2 Repository</name>
+            <url>http://scala-tools.org/repo-releases</url>
+        </pluginRepository>
+    </pluginRepositories>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>1.1.2</version>
+            </dependency>
+            <dependency>
+                <groupId>com.3tierlogic.kinesis.manager</groupId>
+                <artifactId>kinesis-common</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.3tierlogic.kinesis.manager</groupId>
+                <artifactId>kinesis-consumer</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.3tierlogic.kinesis.manager</groupId>
+                <artifactId>kinesis-producer</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.amazonaws</groupId>
+                <artifactId>aws-java-sdk</artifactId>
+                <version>1.9.21</version>
+            </dependency>
+            <dependency>
+                <groupId>com.gilt</groupId>
+                <artifactId>jerkson_2.11</artifactId>
+                <version>0.6.7</version>
+            </dependency>
+            <dependency>
+                <groupId>com.typesafe.akka</groupId>
+                <artifactId>akka-kernel_2.11</artifactId>
+                <version>2.3.9</version>
+            </dependency>
+            <dependency>
+                <groupId>io.spray</groupId>
+                <artifactId>spray-client_2.11</artifactId>
+                <version>1.3.1</version>
+            </dependency>
+            <dependency>
+                <groupId>io.spray</groupId>
+                <artifactId>spray-routing_2.11</artifactId>
+                <version>1.3.2</version>
+            </dependency>
+            <dependency>
+                <groupId>org.fusesource.jansi</groupId>
+                <artifactId>jansi</artifactId>
+                <version>1.11</version>
+            </dependency>
+            <dependency>
+                <groupId>org.scala-lang</groupId>
+                <artifactId>scala-library</artifactId>
+                <version>${scala.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.scalatest</groupId>
+                <artifactId>scalatest_${scala.binary.version}</artifactId>
+                <version>2.2.1</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.scalacheck</groupId>
+                <artifactId>scalacheck_${scala.binary.version}</artifactId>
+                <version>1.12.2</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
-      <dependency>
-    	<groupId>ch.qos.logback</groupId>
-    	<artifactId>logback-classic</artifactId>
-    	<version>1.1.2</version>
-      </dependency>
-      <dependency>
-    	<groupId>com.3tierlogic.kinesis.manager</groupId>
-    	<artifactId>kinesis-common</artifactId>
-    	<version>0.0.1-SNAPSHOT</version>
-      </dependency>
-      <dependency>
-  		<groupId>com.3tierlogic.kinesis.manager</groupId>
-  		<artifactId>kinesis-consumer</artifactId>
-  		<version>0.0.1-SNAPSHOT</version>	
-  	  </dependency>
-  	  <dependency>
-  		<groupId>com.3tierlogic.kinesis.manager</groupId>
-  		<artifactId>kinesis-producer</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
-  	  </dependency>
-      <dependency>
-    	<groupId>com.amazonaws</groupId>
-    	<artifactId>aws-java-sdk</artifactId>
-    	<version>1.9.21</version>
-      </dependency>
-      <dependency>
-    	<groupId>com.gilt</groupId>
-    	<artifactId>jerkson_2.11</artifactId>
-    	<version>0.6.7</version>
-      </dependency>
-      <dependency>
-    	<groupId>com.typesafe.akka</groupId>
-    	<artifactId>akka-kernel_2.11</artifactId>
-    	<version>2.3.9</version>
-      </dependency>
-      <dependency>
-    	<groupId>io.spray</groupId>
-    	<artifactId>spray-client_2.11</artifactId>
-    	<version>1.3.1</version>
-     </dependency>
-      <dependency>
-    	<groupId>io.spray</groupId>
-    	<artifactId>spray-routing_2.11</artifactId>
-    	<version>1.3.2</version>
-      </dependency>
-      <dependency>
-        <groupId>junit</groupId>
-        <artifactId>junit</artifactId>
-        <version>4.4</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-    	<groupId>org.fusesource.jansi</groupId>
-    	<artifactId>jansi</artifactId>
-    	<version>1.11</version>
-      </dependency>
-      <dependency>
-        <groupId>org.scala-lang</groupId>
-        <artifactId>scala-library</artifactId>
-        <version>${scala.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.specs</groupId>
-        <artifactId>specs</artifactId>
-        <version>1.2.5</version>
-        <scope>test</scope>
-      </dependency>
+        <!-- Every module NEEDS ScalaTest -->
+        <dependency>
+            <groupId>org.scalatest</groupId>
+            <artifactId>scalatest_${scala.binary.version}</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Every module NEEDS ScalaCheck -->
+        <dependency>
+            <groupId>org.scalacheck</groupId>
+            <artifactId>scalacheck_${scala.binary.version}</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
-  </dependencyManagement>
-  
-  <build>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-eclipse-plugin</artifactId>
-          <version>2.9</version>
-          <configuration>
-            <downloadSources>true</downloadSources>
-            <buildcommands>
-              <buildcommand>ch.epfl.lamp.sdt.core.scalabuilder</buildcommand>
-            </buildcommands>
-            <additionalProjectnatures>
-              <projectnature>ch.epfl.lamp.sdt.core.scalanature</projectnature>
-            </additionalProjectnatures>
-            <classpathContainers>
-              <classpathContainer>org.eclipse.jdt.launching.JRE_CONTAINER</classpathContainer>
-              <classpathContainer>ch.epfl.lamp.sdt.launching.SCALA_CONTAINER</classpathContainer>
-            </classpathContainers>
-          </configuration>
-        </plugin>
-        <plugin>
-          <groupId>org.scala-tools</groupId>
-          <artifactId>maven-scala-plugin</artifactId>
-          <version>2.15.2</version>
-          <executions>
-            <execution>
-              <goals>
-                <goal>compile</goal>
-                <goal>testCompile</goal>
-              </goals>
-            </execution>
-          </executions>
-          <configuration>
-            <scalaVersion>${scala.version}</scalaVersion>
-            <args>
-              <arg>-deprecation</arg>
-              <arg>-feature</arg>
-              <arg>-target:jvm-1.7</arg>
-            </args>
-          </configuration>
-        </plugin>
-      </plugins>
-    </pluginManagement>
-    
-    <plugins>
-      <plugin>
-        <artifactId>maven-eclipse-plugin</artifactId>
-      </plugin>
-      <plugin>
-        <groupId>org.scala-tools</groupId>
-        <artifactId>maven-scala-plugin</artifactId>
-      </plugin>
-    </plugins>
-  </build>
-  
+
+    <build>
+        <pluginManagement>
+
+            <plugins>
+
+                <!-- http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin -->
+                <!-- Disable Surefire (as suggested at the page at the link above)-->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>2.7</version>
+                    <configuration>
+                        <skipTests>true</skipTests>
+                    </configuration>
+                </plugin>
+                <!-- Enable ScalaTest -->
+                <plugin>
+                    <groupId>org.scalatest</groupId>
+                    <artifactId>scalatest-maven-plugin</artifactId>
+                    <version>1.0</version>
+                    <configuration>
+                        <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
+                        <junitxml>.</junitxml>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>test</id>
+                            <goals>
+                                <goal>test</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-eclipse-plugin</artifactId>
+                    <version>2.9</version>
+                    <configuration>
+                        <downloadSources>true</downloadSources>
+                        <buildcommands>
+                            <buildcommand>ch.epfl.lamp.sdt.core.scalabuilder</buildcommand>
+                        </buildcommands>
+                        <additionalProjectnatures>
+                            <projectnature>ch.epfl.lamp.sdt.core.scalanature</projectnature>
+                        </additionalProjectnatures>
+                        <classpathContainers>
+                            <classpathContainer>org.eclipse.jdt.launching.JRE_CONTAINER</classpathContainer>
+                            <classpathContainer>ch.epfl.lamp.sdt.launching.SCALA_CONTAINER</classpathContainer>
+                        </classpathContainers>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.scala-tools</groupId>
+                    <artifactId>maven-scala-plugin</artifactId>
+                    <version>2.15.2</version>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>compile</goal>
+                                <goal>testCompile</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                    <configuration>
+                        <scalaVersion>${scala.version}</scalaVersion>
+                        <args>
+                            <arg>-deprecation</arg>
+                            <arg>-feature</arg>
+                            <arg>-target:jvm-1.7</arg>
+                        </args>
+                    </configuration>
+                </plugin>
+
+            </plugins>
+
+        </pluginManagement>
+
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-eclipse-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.scala-tools</groupId>
+                <artifactId>maven-scala-plugin</artifactId>
+            </plugin>
+            <!-- Every module NEEDS ScalaTest -->
+            <plugin>
+                <groupId>org.scalatest</groupId>
+                <artifactId>scalatest-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+
+    </build>
+
 </project>
