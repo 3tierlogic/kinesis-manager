@@ -11,6 +11,7 @@ import com._3tierlogic.KinesisManager.protocol._
   * 
   * @author Eric Kolotyluk
   * 
+  * @see [[http://doc.akka.io/docs/akka/snapshot/general/actor-systems.html Actor Systems]]
   * @see [[http://doc.akka.io/docs/akka/snapshot/general/configuration.html Akka Configuration]]
   */
 class Service extends akka.kernel.Bootable with Configuration {

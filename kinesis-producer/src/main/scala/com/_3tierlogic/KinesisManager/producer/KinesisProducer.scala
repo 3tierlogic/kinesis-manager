@@ -201,7 +201,7 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
         val future = Future {
           val string = "The quick brown fox jumped over the lazy dog"
           val bytes = new StringOps(string).getBytes
-          val messageEnvelope = new MessageEnvelope(bytes, "unknown", UUID.randomUUID, System.currentTimeMillis, System.nanoTime)
+          val messageEnvelope = new MessageEnvelope(bytes, "unknown", "text", UUID.randomUUID, System.currentTimeMillis, System.nanoTime)
           messageEnvelopeQueue.add(messageEnvelope)
         }
         

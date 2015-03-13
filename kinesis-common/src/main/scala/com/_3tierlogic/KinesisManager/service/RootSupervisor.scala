@@ -22,13 +22,16 @@ import akka.actor.actorRef2Scala
 import akka.io.IO
 import spray.can.Http
 
-/**
- * Root of the Actor Supervisors
- * 
- * This actor is started by the service kernel
- * 
- * @see [[http://spray.io/documentation/1.1-M8/spray-can/http-server/ Spray Can Documentation]]
- */
+/** Root of the Actor Supervisors
+  * 
+  * This actor is started by the service kernel and is responsible for all the other actors in the system.
+  * Not all of our actors are necessarily on the classpath, in particular this actor system is designed to
+  * handle actors that are optionally included in the deployment assembly.
+  * 
+  * @author Eric Kolotyluk
+  * 
+  * @see [[http://spray.io/documentation/1.1-M8/spray-can/http-server/ Spray Can Documentation]]
+  */
 class RootSupervisor extends Actor with ActorLogging with Configuration {
   
   override val supervisorStrategy =
@@ -60,6 +63,12 @@ class RootSupervisor extends Actor with ActorLogging with Configuration {
   lazy val kinesisProducer = actorRefForName("com._3tierlogic.KinesisManager.producer.KinesisProducer")
   lazy val kinesisConsumer = actorRefForName("com._3tierlogic.KinesisManager.consumer.KinesisConsumer")
 
+  /** Novice Tips
+    * 
+    * All received messages originate from the actor's mailbox and always on the same thread. Actors are
+    * not designed to be threadsafe. Concurrency is handled by having multiple actors, with protected state,
+    * or futures, with no state.
+    */
   def receive = {
 
     case Start =>
