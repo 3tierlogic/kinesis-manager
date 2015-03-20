@@ -5,8 +5,10 @@ import java.util.{ArrayList, UUID}
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import akka.actor.{Actor, ActorLogging, ActorRef, actorRef2Scala}
+
 import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, MessagePart}
 import com._3tierlogic.KinesisManager.protocol.{Put, Start, StartFailed, Started}
+import com._3tierlogic.KinesisManager.service.MessageEnvelopeQueue
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model.{CreateStreamRequest, DescribeStreamRequest, PutRecordsRequest, PutRecordsRequestEntry, ResourceNotFoundException}
 
@@ -83,8 +85,13 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
   var startTime: Long = 0
   var endTime: Long = 0
 
-  val messageEnvelopeQueue = new ConcurrentLinkedQueue[MessageEnvelope]
+  /**
+   * http://www.ibm.com/developerworks/library/j-jtp04186/
+   */
+  //val messageEnvelopeQueue = new ConcurrentLinkedQueue[MessageEnvelope]
   val putRecordsRequestEntryQueue = new ConcurrentLinkedQueue[PutRecordsRequestEntry]
+  
+  var messageEnvelopeBufferFuture = Future {}
   
   var testStartTime = 0L
 
@@ -202,7 +209,7 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
           val string = "The quick brown fox jumped over the lazy dog"
           val bytes = new StringOps(string).getBytes
           val messageEnvelope = new MessageEnvelope(bytes, "unknown", "text", UUID.randomUUID, System.currentTimeMillis, System.nanoTime)
-          messageEnvelopeQueue.add(messageEnvelope)
+          MessageEnvelopeQueue.add(messageEnvelope)
         }
         
       }
@@ -212,77 +219,9 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
       
     case Put(messageEnvelope) =>
       
-      messageEnvelopeQueue.add(messageEnvelope)
+      MessageEnvelopeQueue.add(messageEnvelope)
     
-    case PulseEnvelopes =>
-      
-      if (messageEnvelopeQueue.isEmpty()) {
-        if (testStartTime > 0) {
-          val envelopeQueueEmpty = System.currentTimeMillis - testStartTime
-          log.info(s"PulseEnvelopes: envelope queue empty in $envelopeQueueEmpty ms")
-        }
-      } else {
-        val future = {          
-          //val arrayBuffer = new scala.collection.mutable.ArrayBuffer[EventEnvelope](eventEnvelopeQueue.size + 128)
-          
-          val byteArrayOutputStream = new java.io.ByteArrayOutputStream()
-          val objectOutputStream = new java.io.ObjectOutputStream(byteArrayOutputStream)
-
-          // Drain the queue to create a Kinesis PutRecords request
-          //while (! queue.isEmpty) arrayBuffer += queue.poll
-          
-          val timestamp = System.currentTimeMillis
-          var count = 0
-          
-          while (! messageEnvelopeQueue.isEmpty) {
-            objectOutputStream.writeObject(messageEnvelopeQueue.poll)
-            count += 1
-          }
-
-          val drainTime = System.currentTimeMillis - testStartTime
-          log.info(s"PulseEnvelopes: $count envelopes drained in $drainTime ms")
-          
-          objectOutputStream.flush
-          byteArrayOutputStream.flush
-          val block = byteArrayOutputStream.toByteArray
-          
-          var blockCount = 0
-          var index = 0
-          var partCount = 1L
-          val of: Long = block.length / 50000L + 1
-          log.info(s"PulseEnvelopes: of = $of")
-          
-          val uuid = UUID.randomUUID
-          val blobBuffer = new scala.collection.mutable.ArrayBuffer[Future[ByteBuffer]]
-          
-
-          while (index < block.length) {
-            val remainder = block.length - index
-            val chunk = Math.min(remainder, 50000)
-            val to = index + chunk
-            //log.info(s"PulseEnvelopes: index = $index, remainder = $remainder, chunk = chunck, to = $to")
-            val data = java.util.Arrays.copyOfRange(block, index, to)
-            val part = partCount
-            
-            val future = Future {
-              val byteArrayOutputStream = new java.io.ByteArrayOutputStream()
-              val objectOutputStream = new java.io.ObjectOutputStream(byteArrayOutputStream)
-              objectOutputStream.writeObject(new MessagePart(uuid, part, of, data))
-              objectOutputStream.flush
-              byteArrayOutputStream.flush
-              val blob = java.nio.ByteBuffer.wrap(byteArrayOutputStream.toByteArray)
-              val putRecordsRequestEntry  = new PutRecordsRequestEntry
-              putRecordsRequestEntry.setData(blob)
-              putRecordsRequestEntry.setPartitionKey(getKinesisPartitionKey)
-              putRecordsRequestEntryQueue.add(putRecordsRequestEntry)
-            }
-            //log.info("PulseEnvelopes: data.length = " + data.length)
-            index += chunk
-            partCount += 1
-          }
-
-        }
-     }
+    case PulseEnvelopes => drainMessageEnvelopeQueue
 
     case PulseBlocks =>
 
@@ -305,7 +244,7 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
       var count = 0
       var size = 0
       
-      if (messageEnvelopeQueue.isEmpty && putRecordsRequestEntryQueue.isEmpty && testStartTime > 0) {
+      if (MessageEnvelopeQueue.isEmpty && putRecordsRequestEntryQueue.isEmpty && testStartTime > 0) {
         val blockQueueEmpty = System.currentTimeMillis - testStartTime
         log.info(s"PulseBlocks: block queue empty in $blockQueueEmpty ms")
         testStartTime = 0
@@ -333,4 +272,87 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
       
        log.error("received unknown message = " + message)
    }
+  
+  class BetterByteArrayOutputStream extends java.io.ByteArrayOutputStream {
+    def getCount = count
+  }
+  
+  val byteArrayOutputStream = new BetterByteArrayOutputStream()
+  val objectOutputStream = new java.io.ObjectOutputStream(byteArrayOutputStream)
+
+  def drainMessageEnvelopeQueue = {
+    
+    val maximumBlockSize = Integer.MAX_VALUE - 1024
+    
+    // We skip this pulse if the previous one is not finished, or the queue is empty
+    if (messageEnvelopeBufferFuture.isCompleted && !MessageEnvelopeQueue.isEmpty()) {
+      messageEnvelopeBufferFuture = Future {
+        val timestamp = System.currentTimeMillis
+        var count = 0
+        
+        while (! MessageEnvelopeQueue.isEmpty) {
+          if (byteArrayOutputStream.getCount > maximumBlockSize)
+            flushBlock
+          else {
+            objectOutputStream.writeObject(MessageEnvelopeQueue.poll)
+            count += 1
+          }
+        }
+        flushBlock
+      }
+    }
+  }
+  
+  def flushBlock = {
+    
+    // Now that we have a block, we segment it, and do a bulk put to Kinesis
+
+    //val drainTime = System.currentTimeMillis - testStartTime
+    //log.info(s"PulseEnvelopes: $count envelopes drained in $drainTime ms")
+    
+    objectOutputStream.flush
+    byteArrayOutputStream.flush
+
+    val block = byteArrayOutputStream.toByteArray
+    
+    byteArrayOutputStream.reset
+    objectOutputStream.reset
+    
+    val blockFuture = Future {
+      
+      var blockCount = 0
+      var index = 0
+      var partCount = 1L
+      val of: Long = block.length / 50000L + 1
+      log.info(s"PulseEnvelopes: of = $of")
+      
+      val uuid = UUID.randomUUID
+      val blobBuffer = new scala.collection.mutable.ArrayBuffer[Future[ByteBuffer]]
+  
+      while (index < block.length) {
+        val remainder = block.length - index
+        val chunk = Math.min(remainder, 50000)
+        val to = index + chunk
+        //log.info(s"PulseEnvelopes: index = $index, remainder = $remainder, chunk = chunck, to = $to")
+        val data = java.util.Arrays.copyOfRange(block, index, to)
+        val part = partCount
+        
+        val future = Future {
+          val byteArrayOutputStream = new java.io.ByteArrayOutputStream()
+          val objectOutputStream = new java.io.ObjectOutputStream(byteArrayOutputStream)
+          objectOutputStream.writeObject(new MessagePart(uuid, part, of, data))
+          objectOutputStream.flush
+          byteArrayOutputStream.flush
+          val blob = java.nio.ByteBuffer.wrap(byteArrayOutputStream.toByteArray)
+          val putRecordsRequestEntry  = new PutRecordsRequestEntry
+          putRecordsRequestEntry.setData(blob)
+          putRecordsRequestEntry.setPartitionKey(getKinesisPartitionKey)
+          putRecordsRequestEntryQueue.add(putRecordsRequestEntry)
+        }
+        //log.info("PulseEnvelopes: data.length = " + data.length)
+        index += chunk
+        partCount += 1
+      }
+    }
+  }
 }

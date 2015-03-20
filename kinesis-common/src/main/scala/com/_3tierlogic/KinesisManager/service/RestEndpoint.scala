@@ -8,6 +8,8 @@ import akka.pattern.ask
 
 // import com.codahale.jerkson.Json._
 
+import com._3tierlogic.KinesisManager.MessageEnvelope
+
 import spray.routing.HttpService
 import spray.routing.RequestContext
 import spray.routing.PathMatchers.Segment
@@ -61,11 +63,33 @@ class RestEndpoint extends Actor with ActorLogging with HttpService {
           }
         } ~
         post {
-          entity(as[String]) { body =>
+          entity(as[Array[Byte]]) { body =>
             log.info(s"body = $body")
             parameterMap { parameters =>
+              val messageEnvelope = new MessageEnvelope(
+                  body,
+                  parameters.getOrElse("type", ""),
+                  parameters.getOrElse("mime", ""),
+                  parameters.getOrElse("uuid", ""),
+                  parameters.getOrElse("time", ""),
+                  parameters.getOrElse("nano", ""))
+              
               val ACCEPTED = 202
-              complete(HttpResponse(ACCEPTED, parameters.mkString("\n", "\n", "\n\n")))
+
+              if (messageEnvelope.isEmpty()) {
+                complete(HttpResponse(ACCEPTED,"Empty body: message ignored"))
+              }
+              else {
+                MessageEnvelopeQueue.add(messageEnvelope)
+
+                if (messageEnvelope.getWarnings.size() > 0) {
+                  complete(HttpResponse(ACCEPTED, parameters.mkString("\n", "\n", "\n\n")))
+                } else {
+                  complete(HttpResponse(OK,"ok"))
+                }
+              }
+//              val ACCEPTED = 202
+//              complete(HttpResponse(ACCEPTED, parameters.mkString("\n", "\n", "\n\n")))
 //              val event = KinesisEventEnvelope(body, parameters)
 //              val warnings = event.getWarnings
 //              val json = event.getJson
