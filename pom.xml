@@ -1,22 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-    <modelVersion>4.0.0</modelVersion>
+  <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.3tierlogic.kinesis</groupId>
-    <artifactId>manager</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
-    <packaging>pom</packaging>
+  <groupId>com.3tierlogic.kinesis</groupId>
+  <artifactId>manager</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>pom</packaging>
 
-    <name>Kinesis Manager</name>
-    <description>A high level manager service for Kinesis Streams.</description>
-    <inceptionYear>2015</inceptionYear>
+  <name>Kinesis Manager</name>
+  <description>A high level manager service for Kinesis Streams.</description>
+  <inceptionYear>2015</inceptionYear>
 
-    <modules>
-        <module>kinesis-common</module>
-        <module>kinesis-producer</module>
-        <module>kinesis-consumer</module>
-        <module>kinesis-manager</module>
+  <modules>
+    <module>kinesis-common</module>
+    <module>kinesis-producer</module>
+    <module>kinesis-consumer</module>
+    <module>kinesis-manager</module>
     <module>kinesis-producer-gnip</module>
   </modules>
 

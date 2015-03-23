@@ -4,7 +4,11 @@ import java.nio.ByteBuffer
 import java.util.{ArrayList, UUID}
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import akka.actor.{Actor, ActorLogging, ActorRef, actorRef2Scala}
+import akka.actor.Actor
+import akka.actor.ActorLogging
+import akka.actor.ActorRef
+import akka.actor.actorRef2Scala
+import akka.actor.Props
 
 import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, MessagePart}
 import com._3tierlogic.KinesisManager.protocol.{Put, Start, StartFailed, Started}
@@ -107,6 +111,8 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
   def getKinesisPartitionKey = {
     "%04d".format(Math.round(Math.random * 9999))
   }
+
+  lazy val restEndpointRef = context.actorOf(Props[RestEndpoint], "RestEndpoint")
 
   def receive = {
     

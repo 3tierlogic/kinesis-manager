@@ -2,7 +2,10 @@ package com._3tierlogic.KinesisManager
 
 package object protocol {
   
-/** Start and Actor
+  
+case class ApplicationArguments(arguments: Array[String])
+  
+/** Start an Actor
  *  
  *  Generic message to tell an actor to start after being constructed.
  *  
