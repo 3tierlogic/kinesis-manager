@@ -1,26 +1,32 @@
 package com._3tierlogic.KinesisManager.producer
 
+import java.io.ObjectOutputStream
 import java.nio.ByteBuffer
 import java.util.{ArrayList, UUID}
 import java.util.concurrent.ConcurrentLinkedQueue
+
 
 import akka.actor.Actor
 import akka.actor.ActorLogging
 import akka.actor.ActorRef
 import akka.actor.actorRef2Scala
 import akka.actor.Props
+import akka.io.IO
 
-import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, MessagePart}
+import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, BlockSegment}
 import com._3tierlogic.KinesisManager.protocol.{Put, Start, StartFailed, Started}
 import com._3tierlogic.KinesisManager.service.MessageEnvelopeQueue
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model.{CreateStreamRequest, DescribeStreamRequest, PutRecordsRequest, PutRecordsRequestEntry, ResourceNotFoundException}
 
 import scala.collection.immutable.StringOps
+import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-import scala.concurrent.duration.DurationInt
+import scala.concurrent.duration._
 import scala.language.postfixOps
+
+import spray.can.Http
 
 /** Actor for Managing Kinesis Producer Activity
   * 
@@ -70,13 +76,18 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
    * 
    * See also Service.scala for global prototol.
    */
-  case object Active
+  case object StreamActive
   case object PulseEnvelopes
-  case object PulseBlocks
-  case class Wait(time: Long)
+  case object PulseRecords
+  
+  case class StreamActiveCheck(time: Long)
   case class PutRecords(records: scala.collection.mutable.ArrayBuffer[Future[ByteBuffer]])
   
-  val streamName = config.getString("kinesis-manager.stream.name")
+  lazy val streamName = config.getString("amazon.web.service.kinesis.stream.name")
+  
+  lazy val maximumBlockSize =
+    if (config.hasPath("kinesis-manager.producer.block.size.maximum")) config.getInt("kinesis-manager.producer.block.size.maximum")
+    else Integer.MAX_VALUE - 1024
 
   val describeStreamRequest = new DescribeStreamRequest().withStreamName(streamName)
 
@@ -86,16 +97,16 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
   
   var startSender: ActorRef = null
   
-  var startTime: Long = 0
-  var endTime: Long = 0
+  var streamCreationTime: Long = 0
+  var streamCreationTimeLimit: Long = 0
 
   /**
    * http://www.ibm.com/developerworks/library/j-jtp04186/
    */
-  //val messageEnvelopeQueue = new ConcurrentLinkedQueue[MessageEnvelope]
   val putRecordsRequestEntryQueue = new ConcurrentLinkedQueue[PutRecordsRequestEntry]
   
-  var messageEnvelopeBufferFuture = Future {}
+  var pulseEnvelopesFuture = Future {}
+  var pulseRecordsFuture = Future {}
   
   var testStartTime = 0L
 
@@ -112,150 +123,252 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
     "%04d".format(Math.round(Math.random * 9999))
   }
 
-  lazy val restEndpointRef = context.actorOf(Props[RestEndpoint], "RestEndpoint")
-
   def receive = {
     
     case Start =>
       
-      try {
-        startSender = sender
-        
-        // self ! "Hello World"
-
-        log.info(s"Start: streamName = $streamName")
-
-        client.setEndpoint("kinesis.us-west-2.amazonaws.com", "kinesis", "us-west-2")
-        log.info("Start: AWS endpoint = kinesis.us-west-2.amazonaws.com, kinesis, us-west-2")
-        
-        val listStreamResult = client.listStreams()
-        val streamNameList = listStreamResult.getStreamNames
-        
-        val i = streamNameList.iterator
-        while (i.hasNext) {
-          val name = i.next
-          log.info(s"Start: name = $name")
-        }
-        
-        if (streamNameList.contains(streamName)) {
-          log.info(s"Start: using $streamName")
-        } else { 
-          log.info(s"Start: creating stream $streamName")
-            
-          val createStreamRequest = new CreateStreamRequest()
-            .withStreamName(streamName)
-            .withShardCount(1)
-
-          client.createStream(createStreamRequest)
-        }
-
-        val describeStreamResponse = client.describeStream(describeStreamRequest)
-        val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
-        log.info(s"Start: streamStatus = $streamStatus")
-        
-        if (streamStatus.equals("ACTIVE")) self ! Active
-        else if (streamStatus.equals("CREATING")) {
-          startTime = System.currentTimeMillis();
-          endTime = startTime + ( 10 * 60 * 1000 );
-          context.system.scheduler.scheduleOnce(20 seconds, self, Wait(System.currentTimeMillis))
-          log.info("Waiting for stream to go ACTIVE")
-        }
-        else {
-          log.error(s"Start: unknown streamStatus = $streamStatus")
-        }
-      } catch {
-        case exception: com.amazonaws.AmazonClientException =>
-          if (exception.getMessage.contains("credentials")) {
-            log.error(exception.getMessage)
-            startSender ! StartFailed(exception.getMessage)
-            // TODO good place to log a URL that better explains the problem. EK
-          }
-    
-        case exception: Exception =>
-          log.error(exception, "Your message")
-          log.error("-------------" + exception.getMessage)
-          log.error("-------------" + exception.getCause)
-          log.error("-------------" + exception.getStackTrace.mkString("\n"))
-      }
+      startSender = sender
       
-    case Wait(time) =>
-      
-      try {
-        val describeStreamResponse = client.describeStream( describeStreamRequest )
-        val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
-        log.info(s"Wait: streamStatus = $streamStatus")
-        if (streamStatus.equals("ACTIVE")) {
-          // Wait for things to settle a little, based on AWS example code. EK
-          context.system.scheduler.scheduleOnce(1 seconds, self, Active)
-        } else if (time > endTime) {
-          log.error("Stream never went active")
-        } else {
-          context.system.scheduler.scheduleOnce(20 seconds, self, Wait(System.currentTimeMillis))
-          log.info("Still waiting for stream to go ACTIVE")
-        }
-
-      } catch {
-        case resourceNotFoundException: ResourceNotFoundException =>
-          log.error(resourceNotFoundException.getMessage)
-      }
-
-    case Active =>
-      log.info("Active: signalling %s we have Started".format(startSender.path.name))
+      log.info("Start: signalling %s we have Started".format(startSender.path.name))
       startSender ! Started
       
-      context.system.scheduler.schedule(1 seconds, 1 seconds, self, PulseEnvelopes)
-      context.system.scheduler.schedule(1 seconds, 1 seconds, self, PulseBlocks)
+      readyStream
       
-      testStartTime = System.currentTimeMillis
-      
-      val recordCount = 100000
+    case StreamActiveCheck(time) => streamActiveCheck(time)
 
-      for (i <- 0 to recordCount - 1) {
-        val future = Future {
-          val string = "The quick brown fox jumped over the lazy dog"
-          val bytes = new StringOps(string).getBytes
-          val messageEnvelope = new MessageEnvelope(bytes, "unknown", "text", UUID.randomUUID, System.currentTimeMillis, System.nanoTime)
-          MessageEnvelopeQueue.add(messageEnvelope)
-        }
+    case StreamActive => 
+      streamActive
+      
+      val restEndpointPort = config.getInt("kinesis-manager.producer.endpoint.port")
+      val restEndpointRef = context.system.actorOf(Props[RestEndpoint], "accounts-http-api")
+      log.info("Starting " + restEndpointRef.path.name)
+      IO(Http)(context.system) ! Http.Bind(restEndpointRef, "0.0.0.0", port = restEndpointPort)
+
+    case Put(messageEnvelope) => MessageEnvelopeQueue.add(messageEnvelope)
+    
+    case PulseEnvelopes =>
+    
+      // We skip this pulse if the previous one is not finished, or the queue is empty
+      if (pulseEnvelopesFuture.isCompleted && ! MessageEnvelopeQueue.isEmpty()) {
+       pulseEnvelopesFuture = Future {pulseEnvelopes}
+      }
+
+    case PulseRecords => 
+    
+      // We skip this pulse if the previous one is not finished, or the queue is empty
+      if (pulseRecordsFuture.isCompleted && ! putRecordsRequestEntryQueue.isEmpty()) {
+       pulseRecordsFuture = Future {pulseRecords}
+      }
+
+    case message: Any =>
+       // Uncaught messages get propagated so we need to catch any strays here.
+
+       log.error("received unknown message = " + message)
+  }
+  
+  def readyStream = {
+    try {
+      val kinesisEndpoint = config.getString("amazon.web.service.client.endpoint")
+      log.info(s"kinesisEndpoint = $kinesisEndpoint")        
+      client.setEndpoint(kinesisEndpoint)
         
+      val streamNameList = client.listStreams.getStreamNames.toList
+      val streamNameLog  = streamNameList.mkString("\n<stream-names>\n  ", "\n  ", "\n</stream-names>")
+      
+      log.info(streamNameLog)
+      
+      if (streamNameList.contains(streamName)) {
+        log.info(s"using $streamName")
+      } else { 
+        log.info(s"creating stream $streamName")
+            
+        val createStreamRequest = new CreateStreamRequest()
+          .withStreamName(streamName)
+          .withShardCount(config.getInt("amazon.web.service.kinesis.shard.count"))
+
+        client.createStream(createStreamRequest)
+      }
+
+      val describeStreamResponse = client.describeStream(describeStreamRequest)
+      val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
+      log.info(s"streamStatus = $streamStatus")
+      
+      if (streamStatus.equals("ACTIVE")) self ! StreamActive
+      else if (streamStatus.equals("CREATING")) {
+        streamCreationTime = System.currentTimeMillis()
+        streamCreationTimeLimit = streamCreationTime + Duration(10, MINUTES).toMillis
+        context.system.scheduler.scheduleOnce(20 seconds, self, StreamActiveCheck(System.currentTimeMillis))
+        log.info("Waiting for stream to go ACTIVE")
+      }
+      else {
+        log.error(s"unknown streamStatus = $streamStatus")
+      }
+    } catch {
+      case exception: com.amazonaws.AmazonClientException =>
+        if (exception.getMessage.contains("credentials")) {
+          log.error(exception.getMessage)
+          startSender ! StartFailed(exception.getMessage)
+          // TODO good place to log a URL that better explains the problem. EK
+        }
+  
+      case exception: Exception =>
+        log.error(exception, "Your message")
+        log.error("-------------" + exception.getMessage)
+        log.error("-------------" + exception.getCause)
+        log.error("-------------" + exception.getStackTrace.mkString("\n"))
+    }
+      
+  }
+  
+  def streamActiveCheck(time: Long) = {
+    try {
+      val describeStreamResponse = client.describeStream( describeStreamRequest )
+      val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
+      log.info(s"Wait: streamStatus = $streamStatus")
+      if (streamStatus.equals("ACTIVE")) {
+        // Wait for things to settle a little, based on AWS example code. EK
+        context.system.scheduler.scheduleOnce(1 seconds, self, StreamActive)
+      } else if (time > streamCreationTimeLimit) {
+        log.error("Stream never went active")
+      } else {
+        context.system.scheduler.scheduleOnce(20 seconds, self, StreamActiveCheck(System.currentTimeMillis))
+        log.info("Still waiting for stream to go ACTIVE")
+      }
+
+    } catch {
+      case resourceNotFoundException: ResourceNotFoundException =>
+        log.error(resourceNotFoundException.getMessage)
+    }
+  }
+  
+  def streamActive = {
+    context.system.scheduler.schedule(1 seconds, 1 seconds, self, PulseEnvelopes)
+    context.system.scheduler.schedule(1 seconds, 1 seconds, self, PulseRecords)
+    
+    testStartTime = System.currentTimeMillis
+    
+    val recordCount = 100000
+
+    for (i <- 0 to recordCount - 1) {
+      val future = Future {
+        val string = "The quick brown fox jumped over the lazy dog"
+        val bytes = new StringOps(string).getBytes
+        val messageEnvelope = new MessageEnvelope(bytes, "unknown", "text", UUID.randomUUID, System.currentTimeMillis, System.nanoTime)
+        MessageEnvelopeQueue.add(messageEnvelope)
       }
       
-      val ingestionTime = System.currentTimeMillis - testStartTime
-      log.info(s"Active:  $recordCount logical records consumed in $ingestionTime ms")
-      
-    case Put(messageEnvelope) =>
-      
-      MessageEnvelopeQueue.add(messageEnvelope)
+    }
     
-    case PulseEnvelopes => drainMessageEnvelopeQueue
+    val ingestionTime = System.currentTimeMillis - testStartTime
+    log.info(s"Active:  $recordCount logical records consumed in $ingestionTime ms")
+  }
+  
+  
+  class BetterByteArrayOutputStream extends java.io.ByteArrayOutputStream {
+    def getCount = count
+  }
+  
+  /* In response to a pulse, drain the MessageEvenlopeQueue
+   * 
+   * This runs in the background via a Future so our actor can
+   * return to processing in-box messages again.
+   */
+  def pulseEnvelopes = {
+        
+    val byteArrayOutputStream = new BetterByteArrayOutputStream()
+    val objectOutputStream = new java.io.ObjectOutputStream(byteArrayOutputStream)
 
-    case PulseBlocks =>
+    val timestamp = System.currentTimeMillis
+    var count = 0
+    
+    while (! MessageEnvelopeQueue.isEmpty) {
+      // TODO - we could handle buffer overflows better - EK
+      if (byteArrayOutputStream.getCount > maximumBlockSize) {
+        flushBlock(byteArrayOutputStream, objectOutputStream)
+        byteArrayOutputStream.reset
+        objectOutputStream.reset
+      } else {
+        objectOutputStream.writeObject(MessageEnvelopeQueue.poll)
+        count += 1
+      }
+    }
+    flushBlock(byteArrayOutputStream, objectOutputStream)
+  }
+  
+  /* Flush the currently message block to our segment stream.
+   * 
+   */
+  def flushBlock(byteArrayOutputStream: BetterByteArrayOutputStream, objectOutputStream: ObjectOutputStream) = {
+    
+    // Now that we have a block, we segment it, and do a bulk put to Kinesis
 
+    //val drainTime = System.currentTimeMillis - testStartTime
+    //log.info(s"PulseEnvelopes: $count envelopes drained in $drainTime ms")
+    
+    objectOutputStream.flush
+    byteArrayOutputStream.flush
+
+    // This needs to be done before creating our future, as it captures the
+    // ByteArray to be segmented into physical Kinesis messages. This needs
+    // to be a val so the future can capture the current value
+    val block = byteArrayOutputStream.toByteArray
+    
+    val blockFuture = Future {
+      
+      // var blockCount = 0
+      var index = 0
+      var partCount = 1L
+      val of: Long = block.length / 50000L + 1
+      log.info(s"PulseEnvelopes: of = $of")
+      
+      val uuid = UUID.randomUUID
+      //val blobBuffer = new scala.collection.mutable.ArrayBuffer[Future[ByteBuffer]]
+  
+      while (index < block.length) {
+        val remainder = block.length - index
+        val chunk = Math.min(remainder, 50000)
+        val to = index + chunk
+        //log.info(s"PulseEnvelopes: index = $index, remainder = $remainder, chunk = chunck, to = $to")
+        val data = java.util.Arrays.copyOfRange(block, index, to)
+        val part = partCount
+        
+        val future = Future {
+          val byteArrayOutputStream = new java.io.ByteArrayOutputStream()
+          val objectOutputStream = new java.io.ObjectOutputStream(byteArrayOutputStream)
+          objectOutputStream.writeObject(new BlockSegment(uuid, part, of, data))
+          objectOutputStream.flush
+          byteArrayOutputStream.flush
+          val blob = java.nio.ByteBuffer.wrap(byteArrayOutputStream.toByteArray)
+          val putRecordsRequestEntry  = new PutRecordsRequestEntry
+          putRecordsRequestEntry.setData(blob)
+          putRecordsRequestEntry.setPartitionKey(getKinesisPartitionKey)
+          putRecordsRequestEntryQueue.add(putRecordsRequestEntry)
+        }
+        //log.info("PulseEnvelopes: data.length = " + data.length)
+        index += chunk
+        partCount += 1
+      }
+    }
+  }
+  
+  /* Push Block Segments to Kinesis as Kinesis Records
+   * 
+   */
+  def pulseRecords = {
+    // Do this in the background on a Future so our actor can process the next
+    // message in its in-box
+    val future = Future {
       val putRecordsRequestEntryList  = new ArrayList[PutRecordsRequestEntry]
 
-      def putRecords = {
-
-        val putRecordsRequest = new PutRecordsRequest()
-          .withStreamName(streamName)
-          .withRecords(putRecordsRequestEntryList)
-
-        val putTime = System.currentTimeMillis
-        val putRecordsResult  = client.putRecords(putRecordsRequest)
-        log.info("PulseBlocks: put " + putRecordsResult.getRecords.size() + " blocks in " + (System.currentTimeMillis - putTime) + " ms")
-        if (putRecordsResult.getFailedRecordCount > 0) log.error(putRecordsResult.getFailedRecordCount + " records failed")
-        //log.info(s"PulseBlocks: putRecordsResult = $putRecordsResult")
-        putRecordsRequestEntryList.clear
-      }
-      
       var count = 0
       var size = 0
-      
-      if (MessageEnvelopeQueue.isEmpty && putRecordsRequestEntryQueue.isEmpty && testStartTime > 0) {
-        val blockQueueEmpty = System.currentTimeMillis - testStartTime
-        log.info(s"PulseBlocks: block queue empty in $blockQueueEmpty ms")
-        testStartTime = 0
-      }
-      
+//    
+//    if (MessageEnvelopeQueue.isEmpty && putRecordsRequestEntryQueue.isEmpty && testStartTime > 0) {
+//      val blockQueueEmpty = System.currentTimeMillis - testStartTime
+//      log.info(s"PulseBlocks: block queue empty in $blockQueueEmpty ms")
+//      testStartTime = 0
+//    }
+    
       // Drain the queue
       while (! putRecordsRequestEntryQueue.isEmpty()) {
         putRecordsRequestEntryList.add(putRecordsRequestEntryQueue.poll)
@@ -272,92 +385,18 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
       }
     
       if (! putRecordsRequestEntryList.isEmpty) putRecords
-
-    
-    case message: Any =>
       
-       log.error("received unknown message = " + message)
-   }
+      def putRecords = {
+        val putRecordsRequest = new PutRecordsRequest()
+          .withStreamName(streamName)
+          .withRecords(putRecordsRequestEntryList)
   
-  class BetterByteArrayOutputStream extends java.io.ByteArrayOutputStream {
-    def getCount = count
-  }
-  
-  val byteArrayOutputStream = new BetterByteArrayOutputStream()
-  val objectOutputStream = new java.io.ObjectOutputStream(byteArrayOutputStream)
-
-  def drainMessageEnvelopeQueue = {
-    
-    val maximumBlockSize = Integer.MAX_VALUE - 1024
-    
-    // We skip this pulse if the previous one is not finished, or the queue is empty
-    if (messageEnvelopeBufferFuture.isCompleted && !MessageEnvelopeQueue.isEmpty()) {
-      messageEnvelopeBufferFuture = Future {
-        val timestamp = System.currentTimeMillis
-        var count = 0
-        
-        while (! MessageEnvelopeQueue.isEmpty) {
-          if (byteArrayOutputStream.getCount > maximumBlockSize)
-            flushBlock
-          else {
-            objectOutputStream.writeObject(MessageEnvelopeQueue.poll)
-            count += 1
-          }
-        }
-        flushBlock
-      }
-    }
-  }
-  
-  def flushBlock = {
-    
-    // Now that we have a block, we segment it, and do a bulk put to Kinesis
-
-    //val drainTime = System.currentTimeMillis - testStartTime
-    //log.info(s"PulseEnvelopes: $count envelopes drained in $drainTime ms")
-    
-    objectOutputStream.flush
-    byteArrayOutputStream.flush
-
-    val block = byteArrayOutputStream.toByteArray
-    
-    byteArrayOutputStream.reset
-    objectOutputStream.reset
-    
-    val blockFuture = Future {
-      
-      var blockCount = 0
-      var index = 0
-      var partCount = 1L
-      val of: Long = block.length / 50000L + 1
-      log.info(s"PulseEnvelopes: of = $of")
-      
-      val uuid = UUID.randomUUID
-      val blobBuffer = new scala.collection.mutable.ArrayBuffer[Future[ByteBuffer]]
-  
-      while (index < block.length) {
-        val remainder = block.length - index
-        val chunk = Math.min(remainder, 50000)
-        val to = index + chunk
-        //log.info(s"PulseEnvelopes: index = $index, remainder = $remainder, chunk = chunck, to = $to")
-        val data = java.util.Arrays.copyOfRange(block, index, to)
-        val part = partCount
-        
-        val future = Future {
-          val byteArrayOutputStream = new java.io.ByteArrayOutputStream()
-          val objectOutputStream = new java.io.ObjectOutputStream(byteArrayOutputStream)
-          objectOutputStream.writeObject(new MessagePart(uuid, part, of, data))
-          objectOutputStream.flush
-          byteArrayOutputStream.flush
-          val blob = java.nio.ByteBuffer.wrap(byteArrayOutputStream.toByteArray)
-          val putRecordsRequestEntry  = new PutRecordsRequestEntry
-          putRecordsRequestEntry.setData(blob)
-          putRecordsRequestEntry.setPartitionKey(getKinesisPartitionKey)
-          putRecordsRequestEntryQueue.add(putRecordsRequestEntry)
-        }
-        //log.info("PulseEnvelopes: data.length = " + data.length)
-        index += chunk
-        partCount += 1
+        val putTime = System.currentTimeMillis
+        val putRecordsResult  = client.putRecords(putRecordsRequest)
+        log.info("PulseBlocks: put " + putRecordsResult.getRecords.size() + " blocks in " + (System.currentTimeMillis - putTime) + " ms")
+        if (putRecordsResult.getFailedRecordCount > 0) log.error(putRecordsResult.getFailedRecordCount + " records failed")
+        //log.info(s"PulseBlocks: putRecordsResult = $putRecordsResult")
+        putRecordsRequestEntryList.clear
       }
     }
   }

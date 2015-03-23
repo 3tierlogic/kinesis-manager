@@ -1,15 +1,19 @@
 package com._3tierlogic.KinesisManager.service
 
 import java.lang.management.ManagementFactory
+
 import scala.collection.JavaConversions.asScalaBuffer
 import scala.collection.JavaConversions.seqAsJavaList
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
 import scala.language.postfixOps
+
 import com._3tierlogic.KinesisManager.Configuration
+import com._3tierlogic.KinesisManager.protocol._
 import com._3tierlogic.KinesisManager.protocol.Start
 import com._3tierlogic.KinesisManager.protocol.StartFailed
 import com._3tierlogic.KinesisManager.protocol.Started
+
 import akka.actor.Actor
 import akka.actor.ActorLogging
 import akka.actor.OneForOneStrategy
@@ -19,7 +23,6 @@ import akka.actor.SupervisorStrategy.Restart
 import akka.actor.SupervisorStrategy.Resume
 import akka.actor.SupervisorStrategy.Stop
 import akka.actor.actorRef2Scala
-import com.typesafe.config.ConfigRenderOptions
 
 /** '''Root of the Actor Supervisors'''
   * 
@@ -60,8 +63,8 @@ class RootSupervisor extends Actor with ActorLogging with Configuration {
       None
   }
   
-  lazy val kinesisProducer = actorRefForName("com._3tierlogic.KinesisManager.producer.KinesisProducer")
-  lazy val kinesisConsumer = actorRefForName("com._3tierlogic.KinesisManager.consumer.KinesisConsumer")
+//  lazy val kinesisProducer = actorRefForName("com._3tierlogic.KinesisManager.producer.KinesisProducer")
+//  lazy val kinesisConsumer = actorRefForName("com._3tierlogic.KinesisManager.consumer.KinesisConsumer")
   
   var actorsStarted = false
 
@@ -73,6 +76,9 @@ class RootSupervisor extends Actor with ActorLogging with Configuration {
     * internal state is only accessible by one thread at a time.
     */
   def receive = {
+    
+    case ApplicationArguments(arguments) =>
+      log.info("received ApplicationArguments")
 
     case Start =>
       
@@ -81,7 +87,6 @@ class RootSupervisor extends Actor with ActorLogging with Configuration {
       if (actorList.isEmpty()) {
         log.warning("config: kinesis-manager.actors is missing or empty! Shutting down now")
         context.system.shutdown()
-
       }
       
       actorList.foreach { configValue =>

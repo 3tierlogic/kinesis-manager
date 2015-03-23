@@ -4,7 +4,13 @@ import java.nio.ByteBuffer
 import java.util.{ArrayList, UUID}
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import akka.actor.{Actor, ActorLogging, ActorRef, actorRef2Scala}
+import scala.collection.JavaConversions._
+
+
+import akka.actor.Actor
+import akka.actor.ActorLogging
+import akka.actor.ActorRef
+import akka.actor.actorRef2Scala
 
 import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, MessagePart}
 import com._3tierlogic.KinesisManager.protocol.{Put, Start, StartFailed, Started}
@@ -72,7 +78,7 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
   case class Wait(time: Long)
   case class PutRecords(records: scala.collection.mutable.ArrayBuffer[Future[ByteBuffer]])
   
-  val streamName = config.getString("kinesis-manager.stream.name")
+  val streamName = config.getString("amazon.web.service.kinesis.stream.name")
 
   val describeStreamRequest = new DescribeStreamRequest().withStreamName(streamName)
 
@@ -112,65 +118,12 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
     
     case Start =>
       
-      try {
-        startSender = sender
-        
-        // self ! "Hello World"
-
-        log.info(s"Start: streamName = $streamName")
-
-        client.setEndpoint("kinesis.us-west-2.amazonaws.com", "kinesis", "us-west-2")
-        log.info("Start: AWS endpoint = kinesis.us-west-2.amazonaws.com, kinesis, us-west-2")
-        
-        val listStreamResult = client.listStreams()
-        val streamNameList = listStreamResult.getStreamNames
-        
-        val i = streamNameList.iterator
-        while (i.hasNext) {
-          val name = i.next
-          log.info(s"Start: name = $name")
-        }
-        
-        if (streamNameList.contains(streamName)) {
-          log.info(s"Start: using $streamName")
-        } else { 
-          log.info(s"Start: creating stream $streamName")
-            
-          val createStreamRequest = new CreateStreamRequest()
-            .withStreamName(streamName)
-            .withShardCount(1)
-
-          client.createStream(createStreamRequest)
-        }
-
-        val describeStreamResponse = client.describeStream(describeStreamRequest)
-        val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
-        log.info(s"Start: streamStatus = $streamStatus")
-        
-        if (streamStatus.equals("ACTIVE")) self ! Active
-        else if (streamStatus.equals("CREATING")) {
-          startTime = System.currentTimeMillis();
-          endTime = startTime + ( 10 * 60 * 1000 );
-          context.system.scheduler.scheduleOnce(20 seconds, self, Wait(System.currentTimeMillis))
-          log.info("Waiting for stream to go ACTIVE")
-        }
-        else {
-          log.error(s"Start: unknown streamStatus = $streamStatus")
-        }
-      } catch {
-        case exception: com.amazonaws.AmazonClientException =>
-          if (exception.getMessage.contains("credentials")) {
-            log.error(exception.getMessage)
-            startSender ! StartFailed(exception.getMessage)
-            // TODO good place to log a URL that better explains the problem. EK
-          }
-    
-        case exception: Exception =>
-          log.error(exception, "Your message")
-          log.error("-------------" + exception.getMessage)
-          log.error("-------------" + exception.getCause)
-          log.error("-------------" + exception.getStackTrace.mkString("\n"))
-      }
+      startSender = sender
+      
+      log.info("Active: signalling %s we have Started".format(startSender.path.name))
+      startSender ! Started
+      
+      readyStream
       
     case Wait(time) =>
       
@@ -194,8 +147,6 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
       }
 
     case Active =>
-      log.info("Active: signalling %s we have Started".format(startSender.path.name))
-      startSender ! Started
       
       context.system.scheduler.schedule(1 seconds, 1 seconds, self, PulseEnvelopes)
       context.system.scheduler.schedule(1 seconds, 1 seconds, self, PulseBlocks)
@@ -271,7 +222,61 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
     case message: Any =>
       
        log.error("received unknown message = " + message)
-   }
+  }
+  
+  def readyStream = {
+    try {
+      val kinesisEndpoint = config.getString("amazon.web.service.client.endpoint")
+      log.info(s"kinesisEndpoint = $kinesisEndpoint")        
+      client.setEndpoint(kinesisEndpoint)
+        
+      val streamNameList = client.listStreams.getStreamNames.toList
+      val streamNameLog  = streamNameList.mkString("\n<stream-names>\n  ", "\n  ", "\n</stream-names>")
+      
+      log.info(streamNameLog)
+      
+      if (streamNameList.contains(streamName)) {
+        log.info(s"using $streamName")
+      } else { 
+        log.info(s"creating stream $streamName")
+            
+        val createStreamRequest = new CreateStreamRequest()
+          .withStreamName(streamName)
+          .withShardCount(config.getInt("amazon.web.service.kinesis.shard.count"))
+
+        client.createStream(createStreamRequest)
+      }
+
+      val describeStreamResponse = client.describeStream(describeStreamRequest)
+      val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
+      log.info(s"streamStatus = $streamStatus")
+      
+      if (streamStatus.equals("ACTIVE")) self ! Active
+      else if (streamStatus.equals("CREATING")) {
+        startTime = System.currentTimeMillis();
+        endTime = startTime + ( 10 * 60 * 1000 );
+        context.system.scheduler.scheduleOnce(20 seconds, self, Wait(System.currentTimeMillis))
+        log.info("Waiting for stream to go ACTIVE")
+      }
+      else {
+        log.error(s"Start: unknown streamStatus = $streamStatus")
+      }
+    } catch {
+      case exception: com.amazonaws.AmazonClientException =>
+        if (exception.getMessage.contains("credentials")) {
+          log.error(exception.getMessage)
+          startSender ! StartFailed(exception.getMessage)
+          // TODO good place to log a URL that better explains the problem. EK
+        }
+  
+      case exception: Exception =>
+        log.error(exception, "Your message")
+        log.error("-------------" + exception.getMessage)
+        log.error("-------------" + exception.getCause)
+        log.error("-------------" + exception.getStackTrace.mkString("\n"))
+    }
+      
+  }
   
   class BetterByteArrayOutputStream extends java.io.ByteArrayOutputStream {
     def getCount = count

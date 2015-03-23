@@ -3,11 +3,14 @@ package com._3tierlogic.KinesisManager.consumer
 import java.util.UUID
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
-import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, MessagePart}
+import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, BlockSegment}
 import com._3tierlogic.KinesisManager.protocol.Start
+import com.codahale.jerkson.Json._
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model.{DescribeStreamRequest, DescribeStreamResult, GetRecordsRequest, GetShardIteratorRequest}
+import com.amazonaws.services.s3.AmazonS3Client
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
@@ -23,13 +26,13 @@ import scala.language.postfixOps
   */
 class KinesisConsumer extends Actor with ActorLogging with Configuration {
   
-  val streamName = config.getString("kinesis-manager.stream.name")
+  val streamName = config.getString("amazon.web.service.kinesis.stream.name")
 
   case object Pulse
   case class Wait(time: Long)
 
   val amazonKinesisClient = new AmazonKinesisClient
-
+  val amazonS3Client = new AmazonS3Client
   
   var startSender: ActorRef = null
   
@@ -47,6 +50,21 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       log.info("Start: AWS endpoint = kinesis.us-west-2.amazonaws.com, kinesis, us-west-2")
 
       context.system.scheduler.scheduleOnce(40 seconds, self, Wait(System.currentTimeMillis))
+      
+      val bucketName   = "platform3.kinesis-manager"
+      val bucketList   = amazonS3Client.listBuckets.toList
+      val bucketOption = bucketList.find {bucket => bucket.getName == bucketName}
+      val bucket = bucketOption match {
+        case Some(bucket) => bucket
+        case None =>
+          log.info("creating bucket: " + bucketName)
+          amazonS3Client.createBucket(bucketName)
+      }
+      
+      log.info("using S3 bucket: " + bucket.getName)
+      
+      //val bucketsLog = buckets.mkString("\n<buckets>\n  ", "\n  ", "\n</buckets")
+      //log.info(bucketsLog)
       
     case Wait(time) =>
       
@@ -106,42 +124,51 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
         
       log.info("Start: got " + records.size() + " records")
       
-      val partMap = scala.collection.mutable.Map[UUID,scala.collection.mutable.Map[Long,MessagePart]]()
+      val partMap = scala.collection.mutable.Map[UUID,scala.collection.mutable.Map[Long,BlockSegment]]()
+      
+      case class KinesisConsumerRecord(sequenceNumber: String, partitionKey: String, data: BlockSegment)
   
       val i = records.iterator()
       while (i.hasNext()) {
         val record = i.next()
+        val partitionKey = record.getPartitionKey
         lastSequenceNumber = record.getSequenceNumber
         log.info(s"Start: record = $record")
         val data = record.getData
         val f = new java.io.ByteArrayInputStream(data.array())
         val buffer = new java.io.ObjectInputStream(f)
-        val eventPart = buffer.readObject().asInstanceOf[MessagePart]
-        log.info(s"Start: uuid      = " + eventPart.uuid)
-        log.info(s"Start: part      = " + eventPart.part)
-        log.info(s"Start: of        = " + eventPart.of)
-        log.info(s"Start: data.size = " + eventPart.data.size)
-        log.info(s"Start: data      = " + eventPart.data)
+        val blockSegment = buffer.readObject().asInstanceOf[BlockSegment]
+        log.info(s"Start: uuid      = " + blockSegment.uuid)
+        log.info(s"Start: part      = " + blockSegment.part)
+        log.info(s"Start: of        = " + blockSegment.of)
+        log.info(s"Start: data.size = " + blockSegment.data.size)
+        log.info(s"Start: data      = " + blockSegment.data)
+        
+        val kinesisConsumerRecord = KinesisConsumerRecord(lastSequenceNumber, partitionKey, blockSegment)
+        
+        val json = generate(kinesisConsumerRecord)
+        
+        log.debug(json)
           
         ///////////////////////////////////
           
-        var partList: mutable.Map[Long, MessagePart] = partMap.getOrElse(eventPart.uuid, scala.collection.mutable.Map[Long,MessagePart]())
+        var partList: mutable.Map[Long, BlockSegment] = partMap.getOrElse(blockSegment.uuid, scala.collection.mutable.Map[Long,BlockSegment]())
           
-        if (partList.size == 0) partMap(eventPart.uuid) = partList
+        if (partList.size == 0) partMap(blockSegment.uuid) = partList
           
-        partList(eventPart.part) = eventPart
+        partList(blockSegment.part) = blockSegment
           
         log.info("Start: partList.size = " + partList.size)
           
-        if (partList.size == eventPart.of) {
+        if (partList.size == blockSegment.of) {
           val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Byte]
-          for (i <- 1L to eventPart.of) {
+          for (i <- 1L to blockSegment.of) {
             val data = partList(i).data
             log.info("Start: eventPart.data.length = " + data.length)
             arrayBuffer.appendAll(data)
           }
             
-          log.info("Start: deserializing " + eventPart.uuid)
+          log.info("Start: deserializing " + blockSegment.uuid)
             
           val byteArrayInputStream = new java.io.ByteArrayInputStream(arrayBuffer.toArray)
           val objectInputStream = new java.io.ObjectInputStream(byteArrayInputStream)
@@ -154,6 +181,7 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
 //                log.info("Start: uuid = " + eventEnvelope.uuid)
 //                log.info("Start: time = " + eventEnvelope.time)
 //                log.info("Start: nano = " + eventEnvelope.nano)
+              
             }
  
           } catch {
