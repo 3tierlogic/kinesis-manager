@@ -1,10 +1,12 @@
 package com._3tierlogic.KinesisManager.consumer
 
-import java.io.StringBufferInputStream
+import java.text.SimpleDateFormat;
 import java.util.UUID
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
-import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, BlockSegment}
+import com._3tierlogic.KinesisManager.Configuration
+import com._3tierlogic.KinesisManager.MessageEnvelope
+import com._3tierlogic.KinesisManager.BlockSegment
 import com._3tierlogic.KinesisManager.protocol.Start
 import com.codahale.jerkson.Json._
 import com.amazonaws.services.kinesis.AmazonKinesisClient
@@ -28,6 +30,8 @@ import scala.language.postfixOps
 class KinesisConsumer extends Actor with ActorLogging with Configuration {
   
   val streamName = config.getString("amazon.web.service.kinesis.stream.name")
+  
+  val simpleYearMonthDay = new SimpleDateFormat("yyyy-MM-dd");
 
   case object Pulse
   case class Wait(time: Long)
@@ -65,6 +69,27 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       }
       
       log.info("using S3 bucket: " + bucket.getName)
+      
+      
+//      val listObjectsRequest = new com.amazonaws.services.s3.model.ListObjectsRequest
+//      listObjectsRequest.setBucketName(bucketName)
+//      listObjectsRequest.setDelimiter("/")
+//        
+//      val objectListing = amazonS3Client.listObjects(listObjectsRequest)
+//      
+//      
+//      
+////      val objectSummaries = objectListing.getObjectSummaries.toList
+////      objectSummaries.foreach { summary => 
+////        log.info(summary.getKey)
+////      }
+//      
+//      log.info("---------------------------------------------")
+//      objectListing.getCommonPrefixes.foreach { prefix =>  
+//        log.info(prefix)
+//      }
+//      log.info("---------------------------------------------")
+
       
       //val bucketsLog = buckets.mkString("\n<buckets>\n  ", "\n  ", "\n</buckets")
       //log.info(bucketsLog)
@@ -113,7 +138,10 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
   }
   
   def getRecords(shard: Shard) = {
-    log.info("using shardId: " + shard.getShardId)
+    
+    val shardId = shard.getShardId
+    
+    log.info("using shardId: " + shardId)
     
     val stringBuilder = new StringBuilder()
     
@@ -122,12 +150,22 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
     getShardIteratorRequest.setStreamName(streamName)
     getShardIteratorRequest.setShardId(shard.getShardId())
     
-    if (lastSequenceNumber == null)
-      getShardIteratorRequest.setShardIteratorType("TRIM_HORIZON")
-    else {
-      getShardIteratorRequest.setStartingSequenceNumber(lastSequenceNumber)
-      getShardIteratorRequest.setShardIteratorType("AFTER_SEQUENCE_NUMBER")
+    lastSequenceNumber(shardId) match {
+      case None =>
+        getShardIteratorRequest.setShardIteratorType("TRIM_HORIZON")
+        log.info("shardIteratorType = " + getShardIteratorRequest.getShardIteratorType)
+      case Some(lastSequenceNumber) =>
+        getShardIteratorRequest.setStartingSequenceNumber(lastSequenceNumber)
+        getShardIteratorRequest.setShardIteratorType("AFTER_SEQUENCE_NUMBER")
+        log.info("shardIteratorType = " + getShardIteratorRequest.getShardIteratorType + " " + lastSequenceNumber)
     }
+    
+//    if (lastSequenceNumber == null)
+//      getShardIteratorRequest.setShardIteratorType("TRIM_HORIZON")
+//    else {
+//      getShardIteratorRequest.setStartingSequenceNumber(lastSequenceNumber)
+//      getShardIteratorRequest.setShardIteratorType("AFTER_SEQUENCE_NUMBER")
+//    }
 
     val getShardIteratorResult = amazonKinesisClient.getShardIterator(getShardIteratorRequest)
     val shardIterator = getShardIteratorResult.getShardIterator()
@@ -164,13 +202,14 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       
       val json = generate(kinesisConsumerRecord)
       
-      log.debug(json)
+      // log.debug(json)
       
       stringBuilder.append(json).append('\n')
-      if (stringBuilder.length > 640000) {
+      if (stringBuilder.length > 1000000) {
         val stream = new java.io.ByteArrayInputStream(stringBuilder.toString.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         val metadata = new com.amazonaws.services.s3.model.ObjectMetadata
-        val key = shard.getShardId + "/" + lastSequenceNumber
+        val date = simpleYearMonthDay.format(System.currentTimeMillis())
+        val key = date + "/" + shard.getShardId + "/" + lastSequenceNumber
         amazonS3Client.putObject(bucketName, key, stream, metadata)
         log.info("writing S3 " + key)
         stringBuilder.clear
@@ -217,6 +256,47 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
         
     }
 
+  }
+  
+  /** '''Last Archived Sequence Number for a Shard'''
+    *
+    * Scan Amazon S3 for the archived messages, and get the sequence number of the
+    * last messaged archived for this shard.
+    */
+  def lastSequenceNumber(shardId: String) = {
+    val listObjectsRequest = new com.amazonaws.services.s3.model.ListObjectsRequest
+    listObjectsRequest.setBucketName(bucketName)
+    listObjectsRequest.setDelimiter("/")
+        
+    var objectListing = amazonS3Client.listObjects(listObjectsRequest)
+      
+    var commonPrefixes = objectListing.getCommonPrefixes
+      
+    log.info("---------------------------------------------")
+    commonPrefixes.foreach { prefix =>  
+      log.info(prefix)
+    }
+    log.info("---------------------------------------------")
+    
+    if (commonPrefixes.isEmpty()) None
+    else {
+      val max = commonPrefixes.max
+      
+      log.info("max = " + max)
+      
+      //listObjectsRequest.setDelimiter(max + shardId + "/")
+      val prefix = max + shardId + "/"
+      listObjectsRequest.setPrefix(prefix)
+      
+      objectListing = amazonS3Client.listObjects(listObjectsRequest)
+      val lastSequenceNumber = objectListing.getObjectSummaries.toList.map {_.getKey }.max.substring(prefix.length)
+      
+      log.info("---------------------------------------------")
+      objectListing.getObjectSummaries.toList.foreach { objectSummary => log.info(objectSummary.getKey) }
+      log.info("---------------------------------------------")
+      
+      Some(lastSequenceNumber)
+    }
   }
   
 }

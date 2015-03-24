@@ -14,7 +14,10 @@ import org.slf4j.LoggerFactory
  */
 trait LogbackLogging {
   
-  LogbackLogging.loggerContext
+  // This statement is actually here to force the LogbackLogging object to instantiate first,
+  // as this causes the status of the logback environment to be logged before anything else
+  // is logged. Isn't side effect programming wonderful :-)
+  if (LogbackLogging.loggerContext == null) println("LogbackLogging.loggerContext == null")
 
   val logger = LoggerFactory.getLogger(getClass);
 

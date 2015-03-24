@@ -12,7 +12,7 @@ import akka.actor.ActorLogging
 import akka.actor.ActorRef
 import akka.actor.actorRef2Scala
 
-import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, MessagePart}
+import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, BlockSegment}
 import com._3tierlogic.KinesisManager.protocol.{Put, Start, StartFailed, Started}
 import com._3tierlogic.KinesisManager.service.MessageEnvelopeQueue
 import com.amazonaws.services.kinesis.AmazonKinesisClient
@@ -345,7 +345,7 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
         val future = Future {
           val byteArrayOutputStream = new java.io.ByteArrayOutputStream()
           val objectOutputStream = new java.io.ObjectOutputStream(byteArrayOutputStream)
-          objectOutputStream.writeObject(new MessagePart(uuid, part, of, data))
+          objectOutputStream.writeObject(new BlockSegment(uuid, part, of, data))
           objectOutputStream.flush
           byteArrayOutputStream.flush
           val blob = java.nio.ByteBuffer.wrap(byteArrayOutputStream.toByteArray)
