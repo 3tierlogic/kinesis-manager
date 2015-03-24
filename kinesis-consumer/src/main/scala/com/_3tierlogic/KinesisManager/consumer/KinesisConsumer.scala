@@ -1,5 +1,6 @@
 package com._3tierlogic.KinesisManager.consumer
 
+import java.io.StringBufferInputStream
 import java.util.UUID
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
@@ -7,7 +8,7 @@ import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, BlockSegm
 import com._3tierlogic.KinesisManager.protocol.Start
 import com.codahale.jerkson.Json._
 import com.amazonaws.services.kinesis.AmazonKinesisClient
-import com.amazonaws.services.kinesis.model.{DescribeStreamRequest, DescribeStreamResult, GetRecordsRequest, GetShardIteratorRequest}
+import com.amazonaws.services.kinesis.model.{DescribeStreamRequest, DescribeStreamResult, GetRecordsRequest, GetShardIteratorRequest, Shard}
 import com.amazonaws.services.s3.AmazonS3Client
 
 import scala.collection.JavaConversions._
@@ -34,6 +35,9 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
   val amazonKinesisClient = new AmazonKinesisClient
   val amazonS3Client = new AmazonS3Client
   
+  val bucketName   = "platform3.kinesis-manager"
+
+  
   var startSender: ActorRef = null
   
   var describeStreamResponse: DescribeStreamResult = null
@@ -51,7 +55,6 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
 
       context.system.scheduler.scheduleOnce(40 seconds, self, Wait(System.currentTimeMillis))
       
-      val bucketName   = "platform3.kinesis-manager"
       val bucketList   = amazonS3Client.listBuckets.toList
       val bucketOption = bucketList.find {bucket => bucket.getName == bucketName}
       val bucket = bucketOption match {
@@ -98,84 +101,107 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       
       log.debug("Pulse: checking stream for messages")
       
-      val shards = describeStreamResponse.getStreamDescription.getShards
-      val shard = shards.get(0)
-          
-      val getShardIteratorRequest = new GetShardIteratorRequest()
-      getShardIteratorRequest.setStreamName(streamName)
-      getShardIteratorRequest.setShardId(shard.getShardId())
+      val shards = describeStreamResponse.getStreamDescription.getShards.toList
+      shards.foreach { getRecords }
       
-      if (lastSequenceNumber == null)
-        getShardIteratorRequest.setShardIteratorType("TRIM_HORIZON")
-      else {
-        getShardIteratorRequest.setStartingSequenceNumber(lastSequenceNumber)
-        getShardIteratorRequest.setShardIteratorType("AFTER_SEQUENCE_NUMBER")
+      context.system.scheduler.scheduleOnce(10 seconds, self, Pulse)
+       
+    case message: Any =>
+      
+      log.error("received unknown message = " + message)
+
+  }
+  
+  def getRecords(shard: Shard) = {
+    log.info("using shardId: " + shard.getShardId)
+    
+    val stringBuilder = new StringBuilder()
+    
+    val getShardIteratorRequest = new GetShardIteratorRequest()
+    
+    getShardIteratorRequest.setStreamName(streamName)
+    getShardIteratorRequest.setShardId(shard.getShardId())
+    
+    if (lastSequenceNumber == null)
+      getShardIteratorRequest.setShardIteratorType("TRIM_HORIZON")
+    else {
+      getShardIteratorRequest.setStartingSequenceNumber(lastSequenceNumber)
+      getShardIteratorRequest.setShardIteratorType("AFTER_SEQUENCE_NUMBER")
+    }
+
+    val getShardIteratorResult = amazonKinesisClient.getShardIterator(getShardIteratorRequest)
+    val shardIterator = getShardIteratorResult.getShardIterator()
+    val getRecordsRequest = new GetRecordsRequest()
+    getRecordsRequest.setShardIterator(shardIterator)
+    getRecordsRequest.setLimit(25)
+      
+    val getRecordsResult = amazonKinesisClient.getRecords(getRecordsRequest)
+    val records = getRecordsResult.getRecords()
+      
+    log.info("Start: got " + records.size() + " records")
+    
+    val partMap = scala.collection.mutable.Map[UUID,scala.collection.mutable.Map[Long,BlockSegment]]()
+    
+    case class KinesisConsumerRecord(sequenceNumber: String, partitionKey: String, data: BlockSegment)
+
+    val i = records.iterator()
+    while (i.hasNext()) {
+      val record = i.next()
+      val partitionKey = record.getPartitionKey
+      lastSequenceNumber = record.getSequenceNumber
+      log.info(s"Start: record = $record")
+      val data = record.getData
+      val f = new java.io.ByteArrayInputStream(data.array())
+      val buffer = new java.io.ObjectInputStream(f)
+      val blockSegment = buffer.readObject().asInstanceOf[BlockSegment]
+      log.info(s"Start: uuid      = " + blockSegment.uuid)
+      log.info(s"Start: part      = " + blockSegment.part)
+      log.info(s"Start: of        = " + blockSegment.of)
+      log.info(s"Start: data.size = " + blockSegment.data.size)
+      log.info(s"Start: data      = " + blockSegment.data)
+      
+      val kinesisConsumerRecord = KinesisConsumerRecord(lastSequenceNumber, partitionKey, blockSegment)
+      
+      val json = generate(kinesisConsumerRecord)
+      
+      log.debug(json)
+      
+      stringBuilder.append(json).append('\n')
+      if (stringBuilder.length > 640000) {
+        val stream = new java.io.ByteArrayInputStream(stringBuilder.toString.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        val metadata = new com.amazonaws.services.s3.model.ObjectMetadata
+        val key = shard.getShardId + "/" + lastSequenceNumber
+        amazonS3Client.putObject(bucketName, key, stream, metadata)
+        log.info("writing S3 " + key)
+        stringBuilder.clear
       }
-  
-      val getShardIteratorResult = amazonKinesisClient.getShardIterator(getShardIteratorRequest)
-      val shardIterator = getShardIteratorResult.getShardIterator()
         
-      val getRecordsRequest = new GetRecordsRequest()
-      getRecordsRequest.setShardIterator(shardIterator)
-      getRecordsRequest.setLimit(25)
+      ///////////////////////////////////
         
-      val getRecordsResult = amazonKinesisClient.getRecords(getRecordsRequest)
-      val records = getRecordsResult.getRecords()
+      var partList: mutable.Map[Long, BlockSegment] = partMap.getOrElse(blockSegment.uuid, scala.collection.mutable.Map[Long,BlockSegment]())
         
-      log.info("Start: got " + records.size() + " records")
-      
-      val partMap = scala.collection.mutable.Map[UUID,scala.collection.mutable.Map[Long,BlockSegment]]()
-      
-      case class KinesisConsumerRecord(sequenceNumber: String, partitionKey: String, data: BlockSegment)
-  
-      val i = records.iterator()
-      while (i.hasNext()) {
-        val record = i.next()
-        val partitionKey = record.getPartitionKey
-        lastSequenceNumber = record.getSequenceNumber
-        log.info(s"Start: record = $record")
-        val data = record.getData
-        val f = new java.io.ByteArrayInputStream(data.array())
-        val buffer = new java.io.ObjectInputStream(f)
-        val blockSegment = buffer.readObject().asInstanceOf[BlockSegment]
-        log.info(s"Start: uuid      = " + blockSegment.uuid)
-        log.info(s"Start: part      = " + blockSegment.part)
-        log.info(s"Start: of        = " + blockSegment.of)
-        log.info(s"Start: data.size = " + blockSegment.data.size)
-        log.info(s"Start: data      = " + blockSegment.data)
+      if (partList.size == 0) partMap(blockSegment.uuid) = partList
         
-        val kinesisConsumerRecord = KinesisConsumerRecord(lastSequenceNumber, partitionKey, blockSegment)
+      partList(blockSegment.part) = blockSegment
         
-        val json = generate(kinesisConsumerRecord)
+      log.info("Start: partList.size = " + partList.size)
         
-        log.debug(json)
+      if (partList.size == blockSegment.of) {
+        val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Byte]
+        for (i <- 1L to blockSegment.of) {
+          val data = partList(i).data
+          log.info("Start: eventPart.data.length = " + data.length)
+          arrayBuffer.appendAll(data)
+        }
           
-        ///////////////////////////////////
+        log.info("Start: deserializing " + blockSegment.uuid)
           
-        var partList: mutable.Map[Long, BlockSegment] = partMap.getOrElse(blockSegment.uuid, scala.collection.mutable.Map[Long,BlockSegment]())
+        val byteArrayInputStream = new java.io.ByteArrayInputStream(arrayBuffer.toArray)
+        val objectInputStream = new java.io.ObjectInputStream(byteArrayInputStream)
           
-        if (partList.size == 0) partMap(blockSegment.uuid) = partList
-          
-        partList(blockSegment.part) = blockSegment
-          
-        log.info("Start: partList.size = " + partList.size)
-          
-        if (partList.size == blockSegment.of) {
-          val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Byte]
-          for (i <- 1L to blockSegment.of) {
-            val data = partList(i).data
-            log.info("Start: eventPart.data.length = " + data.length)
-            arrayBuffer.appendAll(data)
-          }
-            
-          log.info("Start: deserializing " + blockSegment.uuid)
-            
-          val byteArrayInputStream = new java.io.ByteArrayInputStream(arrayBuffer.toArray)
-          val objectInputStream = new java.io.ObjectInputStream(byteArrayInputStream)
-            
-          try {
-            while (true) {
-              val eventEnvelope = objectInputStream.readObject().asInstanceOf[MessageEnvelope]
+        try {
+          while (true) {
+            val eventEnvelope = objectInputStream.readObject().asInstanceOf[MessageEnvelope]
 //                log.info("Start: data = " + new String(eventEnvelope.data))
 //                log.info("Start: type = " + eventEnvelope.`type`)
 //                log.info("Start: uuid = " + eventEnvelope.uuid)
@@ -186,16 +212,10 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
  
           } catch {
             case exception: Exception => log.info("Start: finished reading object")
-          }
-       }
-          
-      }
-      
-      context.system.scheduler.scheduleOnce(1 seconds, self, Pulse)
-       
-    case message: Any =>
-      
-      log.error("received unknown message = " + message)
+        }
+     }
+        
+    }
 
   }
   
