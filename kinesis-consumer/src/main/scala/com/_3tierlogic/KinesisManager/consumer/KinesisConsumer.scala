@@ -23,6 +23,7 @@ import scala.language.postfixOps
 /** Actor for Managing Kinesis Consumer Activity
   * 
   * This actor attempts to make it easier to cons
+  * 
   * @author Eric Kolotyluk
   * 
   * @see [[http://docs.aws.amazon.com/kinesis/latest/dev/introduction.html Kinesis Introduction]]
@@ -42,7 +43,6 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
   
   val bucketName   = "platform3.kinesis-manager"
 
-  
   var startSender: ActorRef = null
   
   var describeStreamResponse: DescribeStreamResult = null
@@ -70,37 +70,8 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       
       log.info("using S3 bucket: " + bucket.getName)
       
-      
-//      val listObjectsRequest = new com.amazonaws.services.s3.model.ListObjectsRequest
-//      listObjectsRequest.setBucketName(bucketName)
-//      listObjectsRequest.setDelimiter("/")
-//        
-//      val objectListing = amazonS3Client.listObjects(listObjectsRequest)
-//      
-//      
-//      
-////      val objectSummaries = objectListing.getObjectSummaries.toList
-////      objectSummaries.foreach { summary => 
-////        log.info(summary.getKey)
-////      }
-//      
-//      log.info("---------------------------------------------")
-//      objectListing.getCommonPrefixes.foreach { prefix =>  
-//        log.info(prefix)
-//      }
-//      log.info("---------------------------------------------")
-
-      
-      //val bucketsLog = buckets.mkString("\n<buckets>\n  ", "\n  ", "\n</buckets")
-      //log.info(bucketsLog)
-      
-    case StreamActive =>
-            
-      val kinesisEndpoint = config.getString("amazon.web.service.client.endpoint")
-      log.info(s"kinesisEndpoint = $kinesisEndpoint")        
+    case StreamActive(kinesisEndpoint) =>
       amazonKinesisClient.setEndpoint(kinesisEndpoint)
-      
-      log.info(s"Start: using $streamName")
         
       val describeStreamRequest = new DescribeStreamRequest()
       describeStreamRequest.setStreamName(streamName)
@@ -123,6 +94,9 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       }
 
       context.system.scheduler.scheduleOnce(60 seconds, self, Pulse)
+      
+    case StreamActiveTimeout =>
+      log.error("StreamActiveTimeout")
 
     case Pulse =>
       
@@ -170,7 +144,7 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
     val getRecordsResult = amazonKinesisClient.getRecords(getRecordsRequest)
     val records = getRecordsResult.getRecords()
       
-    log.info("Start: got " + records.size() + " records")
+    log.info("getRecords: got " + records.size() + " records")
     
     val partMap = scala.collection.mutable.Map[UUID,scala.collection.mutable.Map[Long,BlockSegment]]()
     
@@ -181,16 +155,16 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       val record = i.next()
       val partitionKey = record.getPartitionKey
       val lastSequenceNumber = record.getSequenceNumber
-      log.info(s"Start: record = $record")
+      log.info(s"getRecords: record = $record")
       val data = record.getData
       val f = new java.io.ByteArrayInputStream(data.array())
       val buffer = new java.io.ObjectInputStream(f)
       val blockSegment = buffer.readObject().asInstanceOf[BlockSegment]
-      log.info(s"Start: uuid      = " + blockSegment.uuid)
-      log.info(s"Start: part      = " + blockSegment.part)
-      log.info(s"Start: of        = " + blockSegment.of)
-      log.info(s"Start: data.size = " + blockSegment.data.size)
-      log.info(s"Start: data      = " + blockSegment.data)
+      log.info(s"getRecords: uuid      = " + blockSegment.uuid)
+      log.info(s"getRecords: part      = " + blockSegment.part)
+      log.info(s"getRecords: of        = " + blockSegment.of)
+      log.info(s"getRecords: data.size = " + blockSegment.data.size)
+      //log.info(s"getRecords: data      = " + blockSegment.data)
       
       val kinesisConsumerRecord = KinesisConsumerRecord(lastSequenceNumber, partitionKey, blockSegment)
       
@@ -208,7 +182,7 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
         val key = "segments/" + date + "/" + shard.getShardId + "/" + lastSequenceNumber
         amazonS3Client.putObject(bucketName, key, stream, metadata)
         lastSequenceNumbers(shardId) = lastSequenceNumber
-        log.info("writing S3 " + key)
+        log.info("getRecords: writing S3 " + key)
         stringBuilder.clear
       }
         
@@ -220,7 +194,7 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
         
       partList(blockSegment.part) = blockSegment
         
-      log.info("Start: partList.size = " + partList.size)
+      log.info("getRecords: partList.size = " + partList.size)
         
       if (partList.size == blockSegment.of) {
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Byte]
@@ -243,7 +217,6 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
 //                log.info("Start: uuid = " + eventEnvelope.uuid)
 //                log.info("Start: time = " + eventEnvelope.time)
 //                log.info("Start: nano = " + eventEnvelope.nano)
-              
             }
  
           } catch {

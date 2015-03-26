@@ -77,7 +77,6 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
    * 
    * See also Service.scala for global prototol.
    */
-  //case object StreamActive
   case object PulseEnvelopes
   case object PulseRecords
   
@@ -95,9 +94,9 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
 
   val restEndpointRef = context.system.actorOf(Props[RestEndpoint], "kinesis-manager-endpoint")
 
-  val client = new AmazonKinesisClient
+  val amazonKinesisClient = new AmazonKinesisClient
   
-  def getClient = client
+  //def getClient = client
   
   var startSender: ActorRef = null
   
@@ -138,11 +137,15 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
       
       StreamManager.actorRef ! OpenOrCreateStream
 
-    case StreamActive => 
-
+    case StreamActive(kinesisEndpoint) =>
+      amazonKinesisClient.setEndpoint(kinesisEndpoint)
       streamActive
+      
       log.info("Starting " + restEndpointRef.path.name)
       IO(Http)(context.system) ! Http.Bind(restEndpointRef, "0.0.0.0", port = restEndpointPort)
+      
+    case StreamActiveTimeout =>
+      log.error("StreamActiveTimeout")
       
     case ioResponse: Http.Bound =>
 
@@ -175,20 +178,6 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
        log.error("received unknown message = " + message)
   }
   
-  
-  def streamExists = {
-    val streamNameList = client.listStreams.getStreamNames.toList
-    val streamNameLog  = streamNameList.mkString("\n<stream-names>\n  ", "\n  ", "\n</stream-names>")
-    log.info(streamNameLog)
-    streamNameList.contains(streamName)
-  }
-  
-  def getStreamStatus = {
-    val describeStreamResponse = client.describeStream(describeStreamRequest)
-    val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
-    log.info(s"streamStatus = $streamStatus")
-    streamStatus
-  }
   
   def streamActive = {
     context.system.scheduler.schedule(1 seconds, 1 seconds, self, PulseEnvelopes)
@@ -302,49 +291,56 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
    * 
    */
   def pulseRecords = {
-    // Do this in the background on a Future so our actor can process the next
-    // message in its in-box
-    val future = Future {
-      val putRecordsRequestEntryList  = new ArrayList[PutRecordsRequestEntry]
+    
+    val putRecordsRequestEntryList  = new ArrayList[PutRecordsRequestEntry]
 
-      var count = 0
-      var size = 0
+    def putRecords = {
+      try {
+        log.debug("***************************************")
+        val putRecordsRequest = new PutRecordsRequest()
+          .withStreamName(streamName)
+          .withRecords(putRecordsRequestEntryList)
+  
+        val putTime = System.currentTimeMillis
+        val putRecordsResult  = amazonKinesisClient.putRecords(putRecordsRequest)
+        log.info("putTime = " + (System.currentTimeMillis - putTime))
+        log.info("pulseRecords: put " + putRecordsResult.getRecords.size() + " blocks in " + (System.currentTimeMillis - putTime) + " ms")
+        if (putRecordsResult.getFailedRecordCount > 0) log.error(putRecordsResult.getFailedRecordCount + " records failed")
+        //log.info(s"pulseRecords: putRecordsResult = $putRecordsResult")
+        putRecordsRequestEntryList.clear
+        log.debug("########################################")
+      } catch {
+        case exception: Exception =>
+          log.error(exception, exception.getMessage)
+      }
+    }
+
+    var count = 0
+    var size = 0
 //    
 //    if (MessageEnvelopeQueue.isEmpty && putRecordsRequestEntryQueue.isEmpty && testStartTime > 0) {
 //      val blockQueueEmpty = System.currentTimeMillis - testStartTime
 //      log.info(s"PulseBlocks: block queue empty in $blockQueueEmpty ms")
 //      testStartTime = 0
 //    }
-    
-      // Drain the queue
-      while (! putRecordsRequestEntryQueue.isEmpty()) {
-        putRecordsRequestEntryList.add(putRecordsRequestEntryQueue.poll)
-        count += 1
-        size  += 51200
-        
-        // If we are at the limits of a putRecordsRequest, flush it
-        if (count == 500 || size > 4500000) {
-           log.info(s"PulseBlocks: count = $count, size = $size")
-           putRecords
-           count = 0
-           size = 0
-        }
-      }
-    
-      if (! putRecordsRequestEntryList.isEmpty) putRecords
-      
-      def putRecords = {
-        val putRecordsRequest = new PutRecordsRequest()
-          .withStreamName(streamName)
-          .withRecords(putRecordsRequestEntryList)
   
-        val putTime = System.currentTimeMillis
-        val putRecordsResult  = client.putRecords(putRecordsRequest)
-        log.info("pulseRecords: put " + putRecordsResult.getRecords.size() + " blocks in " + (System.currentTimeMillis - putTime) + " ms")
-        if (putRecordsResult.getFailedRecordCount > 0) log.error(putRecordsResult.getFailedRecordCount + " records failed")
-        //log.info(s"pulseRecords: putRecordsResult = $putRecordsResult")
-        putRecordsRequestEntryList.clear
+    // Drain the queue
+    while (! putRecordsRequestEntryQueue.isEmpty()) {
+      val putRecordsRequestEntry = putRecordsRequestEntryQueue.poll
+      putRecordsRequestEntryList.add(putRecordsRequestEntry)
+      count += 1
+      size  += putRecordsRequestEntry.getData.array.length
+      
+      // If we are at the limits of a putRecordsRequest, flush it
+      if (count == 500 || size > 4500000) {
+         log.info(s"putRecords: count = $count, size = $size")
+         putRecords
+         count = 0
+         size = 0
       }
     }
+  
+    if (! putRecordsRequestEntryList.isEmpty) putRecords
+      
   }
 }

@@ -20,7 +20,7 @@ import scala.language.postfixOps
 
 object StreamManager {
   
-  lazy val actorRef = Service.actorSystem.actorOf(Props[StreamManager], "StreamManager")
+  lazy val actorRef = Service.actorSystem.actorOf(Props[StreamManager])
 
 }
 
@@ -184,6 +184,6 @@ class StreamManager extends Actor with ActorLogging with Configuration {
   
   def streamActive = {
     log.info(s"stream $streamName is ACTIVE")
-    senderQueue.dequeueAll { actorRef => true }.foreach {_ ! StreamActive }
+    senderQueue.dequeueAll { actorRef => true }.foreach { _ ! StreamActive }
   }
 }

@@ -20,7 +20,7 @@ case class StartFailed(message: String)
 
 case object OpenOrCreateStream
 case object OpenStream
-case object StreamActive
+case class StreamActive(kinesisEndpoint: String)
 case object StreamActiveTimeout
 
 // KinesisProducer
