@@ -6,16 +6,17 @@ import java.util.{ArrayList, UUID}
 import java.util.concurrent.ConcurrentLinkedQueue
 
 
-import akka.actor.Actor
 import akka.actor.ActorLogging
 import akka.actor.ActorRef
 import akka.actor.actorRef2Scala
+import akka.actor.Actor
 import akka.actor.Props
 import akka.io.IO
 
 import com._3tierlogic.KinesisManager.{Configuration, MessageEnvelope, BlockSegment}
-import com._3tierlogic.KinesisManager.protocol.{Put, Start, StartFailed, Started}
+import com._3tierlogic.KinesisManager.protocol._
 import com._3tierlogic.KinesisManager.service.MessageEnvelopeQueue
+import com._3tierlogic.KinesisManager.service.StreamManager
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model.{CreateStreamRequest, DescribeStreamRequest, PutRecordsRequest, PutRecordsRequestEntry, ResourceNotFoundException}
 
@@ -76,11 +77,10 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
    * 
    * See also Service.scala for global prototol.
    */
-  case object StreamActive
+  //case object StreamActive
   case object PulseEnvelopes
   case object PulseRecords
   
-  case class StreamActiveCheck(time: Long)
   case class PutRecords(records: scala.collection.mutable.ArrayBuffer[Future[ByteBuffer]])
   
   lazy val streamName = config.getString("amazon.web.service.kinesis.stream.name")
@@ -90,6 +90,10 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
     else Integer.MAX_VALUE - 1024
 
   val describeStreamRequest = new DescribeStreamRequest().withStreamName(streamName)
+        
+  val restEndpointPort = config.getInt("kinesis-manager.producer.endpoint.port")
+
+  val restEndpointRef = context.system.actorOf(Props[RestEndpoint], "kinesis-manager-endpoint")
 
   val client = new AmazonKinesisClient
   
@@ -132,17 +136,22 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
       log.info("Start: signalling %s we have Started".format(startSender.path.name))
       startSender ! Started
       
-      readyStream
-      
-    case StreamActiveCheck(time) => streamActiveCheck(time)
+      StreamManager.actorRef ! OpenOrCreateStream
 
     case StreamActive => 
+
       streamActive
-      
-      val restEndpointPort = config.getInt("kinesis-manager.producer.endpoint.port")
-      val restEndpointRef = context.system.actorOf(Props[RestEndpoint], "accounts-http-api")
       log.info("Starting " + restEndpointRef.path.name)
       IO(Http)(context.system) ! Http.Bind(restEndpointRef, "0.0.0.0", port = restEndpointPort)
+      
+    case ioResponse: Http.Bound =>
+
+      log.info(restEndpointRef.path.name + " Started")
+      log.info("%s bound to port %s".format(restEndpointRef.path.name, restEndpointPort))
+      
+    case ioResponse: Http.CommandFailed => 
+      
+      log.error("%s failed to bind to port 8061: ".format(restEndpointRef.path.name) + ioResponse.cmd.failureMessage)
 
     case Put(messageEnvelope) => MessageEnvelopeQueue.add(messageEnvelope)
     
@@ -166,79 +175,19 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
        log.error("received unknown message = " + message)
   }
   
-  def readyStream = {
-    try {
-      val kinesisEndpoint = config.getString("amazon.web.service.client.endpoint")
-      log.info(s"kinesisEndpoint = $kinesisEndpoint")        
-      client.setEndpoint(kinesisEndpoint)
-        
-      val streamNameList = client.listStreams.getStreamNames.toList
-      val streamNameLog  = streamNameList.mkString("\n<stream-names>\n  ", "\n  ", "\n</stream-names>")
-      
-      log.info(streamNameLog)
-      
-      if (streamNameList.contains(streamName)) {
-        log.info(s"using $streamName")
-      } else { 
-        log.info(s"creating stream $streamName")
-            
-        val createStreamRequest = new CreateStreamRequest()
-          .withStreamName(streamName)
-          .withShardCount(config.getInt("amazon.web.service.kinesis.shard.count"))
-
-        client.createStream(createStreamRequest)
-      }
-
-      val describeStreamResponse = client.describeStream(describeStreamRequest)
-      val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
-      log.info(s"streamStatus = $streamStatus")
-      
-      if (streamStatus.equals("ACTIVE")) self ! StreamActive
-      else if (streamStatus.equals("CREATING")) {
-        streamCreationTime = System.currentTimeMillis()
-        streamCreationTimeLimit = streamCreationTime + Duration(10, MINUTES).toMillis
-        context.system.scheduler.scheduleOnce(20 seconds, self, StreamActiveCheck(System.currentTimeMillis))
-        log.info("Waiting for stream to go ACTIVE")
-      }
-      else {
-        log.error(s"unknown streamStatus = $streamStatus")
-      }
-    } catch {
-      case exception: com.amazonaws.AmazonClientException =>
-        if (exception.getMessage.contains("credentials")) {
-          log.error(exception.getMessage)
-          startSender ! StartFailed(exception.getMessage)
-          // TODO good place to log a URL that better explains the problem. EK
-        }
   
-      case exception: Exception =>
-        log.error(exception, "Your message")
-        log.error("-------------" + exception.getMessage)
-        log.error("-------------" + exception.getCause)
-        log.error("-------------" + exception.getStackTrace.mkString("\n"))
-    }
-      
+  def streamExists = {
+    val streamNameList = client.listStreams.getStreamNames.toList
+    val streamNameLog  = streamNameList.mkString("\n<stream-names>\n  ", "\n  ", "\n</stream-names>")
+    log.info(streamNameLog)
+    streamNameList.contains(streamName)
   }
   
-  def streamActiveCheck(time: Long) = {
-    try {
-      val describeStreamResponse = client.describeStream( describeStreamRequest )
-      val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
-      log.info(s"Wait: streamStatus = $streamStatus")
-      if (streamStatus.equals("ACTIVE")) {
-        // Wait for things to settle a little, based on AWS example code. EK
-        context.system.scheduler.scheduleOnce(1 seconds, self, StreamActive)
-      } else if (time > streamCreationTimeLimit) {
-        log.error("Stream never went active")
-      } else {
-        context.system.scheduler.scheduleOnce(20 seconds, self, StreamActiveCheck(System.currentTimeMillis))
-        log.info("Still waiting for stream to go ACTIVE")
-      }
-
-    } catch {
-      case resourceNotFoundException: ResourceNotFoundException =>
-        log.error(resourceNotFoundException.getMessage)
-    }
+  def getStreamStatus = {
+    val describeStreamResponse = client.describeStream(describeStreamRequest)
+    val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
+    log.info(s"streamStatus = $streamStatus")
+    streamStatus
   }
   
   def streamActive = {
@@ -256,13 +205,11 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
         val messageEnvelope = new MessageEnvelope(bytes, "unknown", "text", UUID.randomUUID, System.currentTimeMillis, System.nanoTime)
         MessageEnvelopeQueue.add(messageEnvelope)
       }
-      
     }
     
     val ingestionTime = System.currentTimeMillis - testStartTime
     log.info(s"Active:  $recordCount logical records consumed in $ingestionTime ms")
   }
-  
   
   class BetterByteArrayOutputStream extends java.io.ByteArrayOutputStream {
     def getCount = count
@@ -393,9 +340,9 @@ class KinesisProducer extends Actor with ActorLogging with Configuration {
   
         val putTime = System.currentTimeMillis
         val putRecordsResult  = client.putRecords(putRecordsRequest)
-        log.info("PulseBlocks: put " + putRecordsResult.getRecords.size() + " blocks in " + (System.currentTimeMillis - putTime) + " ms")
+        log.info("pulseRecords: put " + putRecordsResult.getRecords.size() + " blocks in " + (System.currentTimeMillis - putTime) + " ms")
         if (putRecordsResult.getFailedRecordCount > 0) log.error(putRecordsResult.getFailedRecordCount + " records failed")
-        //log.info(s"PulseBlocks: putRecordsResult = $putRecordsResult")
+        //log.info(s"pulseRecords: putRecordsResult = $putRecordsResult")
         putRecordsRequestEntryList.clear
       }
     }

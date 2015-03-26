@@ -17,6 +17,20 @@ import com._3tierlogic.KinesisManager.protocol._
   * @see [[http://doc.akka.io/docs/akka/snapshot/general/configuration.html Akka Configuration]]
   */
 class Service extends Bootable with Configuration with LogbackLogging {
+
+  def startup = {
+    Service.rootSupervisor ! Start
+  }
+
+  def shutdown = {
+    Service.actorSystem.shutdown()
+  }
+}
+
+/**
+ * boot object for command line runtime
+ */
+object Service extends App with Configuration with LogbackLogging {
   
   // ActorSystem is a heavy object: create only one per application
   // Don't let Akka handle configuration because we're doing it.
@@ -26,19 +40,6 @@ class Service extends Bootable with Configuration with LogbackLogging {
   // Create the root actor of our system, that supervises all the others.
   lazy val rootSupervisor = actorSystem.actorOf(Props[RootSupervisor], "RootSupervisor")
 
-  def startup = {
-    rootSupervisor ! Start
-  }
-
-  def shutdown = {
-    actorSystem.shutdown()
-  }
-}
-
-/**
- * boot object for command line runtime
- */
-object Service extends App with LogbackLogging {
   
   if (args.isEmpty) {
     println("No application arguments were specified!\nuse ? for a list of arguments.")
@@ -57,7 +58,7 @@ object Service extends App with LogbackLogging {
   
   val service = new Service
     
-  service.rootSupervisor ! ApplicationArguments(args)
+  rootSupervisor ! ApplicationArguments(args)
 
   service.startup
   

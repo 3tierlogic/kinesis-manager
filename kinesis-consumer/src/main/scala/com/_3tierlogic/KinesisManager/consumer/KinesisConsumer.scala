@@ -7,7 +7,8 @@ import akka.actor.{Actor, ActorLogging, ActorRef}
 import com._3tierlogic.KinesisManager.Configuration
 import com._3tierlogic.KinesisManager.MessageEnvelope
 import com._3tierlogic.KinesisManager.BlockSegment
-import com._3tierlogic.KinesisManager.protocol.Start
+import com._3tierlogic.KinesisManager.protocol._
+import com._3tierlogic.KinesisManager.service.StreamManager
 import com.codahale.jerkson.Json._
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model.{DescribeStreamRequest, DescribeStreamResult, GetRecordsRequest, GetShardIteratorRequest, Shard}
@@ -36,8 +37,8 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
   case object Pulse
   case class Wait(time: Long)
 
-  val amazonKinesisClient = new AmazonKinesisClient
-  val amazonS3Client = new AmazonS3Client
+  lazy val amazonKinesisClient = new AmazonKinesisClient
+  lazy val amazonS3Client = new AmazonS3Client
   
   val bucketName   = "platform3.kinesis-manager"
 
@@ -46,18 +47,17 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
   
   var describeStreamResponse: DescribeStreamResult = null
   
-  var lastSequenceNumber: String = null
-  
+  val lastSequenceNumbers = scala.collection.mutable.Map[String,String]()
+    
   def receive = {
     
     case Start =>
       
       startSender = sender
       
-      amazonKinesisClient.setEndpoint("kinesis.us-west-2.amazonaws.com", "kinesis", "us-west-2")
-      log.info("Start: AWS endpoint = kinesis.us-west-2.amazonaws.com, kinesis, us-west-2")
-
-      context.system.scheduler.scheduleOnce(40 seconds, self, Wait(System.currentTimeMillis))
+      sender ! Started
+      
+      StreamManager.actorRef ! OpenStream
       
       val bucketList   = amazonS3Client.listBuckets.toList
       val bucketOption = bucketList.find {bucket => bucket.getName == bucketName}
@@ -94,33 +94,35 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       //val bucketsLog = buckets.mkString("\n<buckets>\n  ", "\n  ", "\n</buckets")
       //log.info(bucketsLog)
       
-    case Wait(time) =>
+    case StreamActive =>
+            
+      val kinesisEndpoint = config.getString("amazon.web.service.client.endpoint")
+      log.info(s"kinesisEndpoint = $kinesisEndpoint")        
+      amazonKinesisClient.setEndpoint(kinesisEndpoint)
       
-      val listStreamResult = amazonKinesisClient.listStreams()
-      val streamNameList = listStreamResult.getStreamNames
-      
-      val i = streamNameList.iterator
-      while (i.hasNext) {
-        val name = i.next
-        log.info(s"Start: name = $name")
-      }
-      
-      if (streamNameList.contains(streamName)) {
-        log.info(s"Start: using $streamName")
-          
-        val describeStreamRequest = new DescribeStreamRequest()
-        describeStreamRequest.setStreamName(streamName)
-  
-        describeStreamResponse = amazonKinesisClient.describeStream(describeStreamRequest)
-        val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
-        log.info(s"Start: streamStatus = $streamStatus")
+      log.info(s"Start: using $streamName")
         
-        // context.system.scheduler.schedule(1 seconds, 1 seconds, self, Pulse) 
-        context.system.scheduler.scheduleOnce(1 seconds, self, Pulse)
+      val describeStreamRequest = new DescribeStreamRequest()
+      describeStreamRequest.setStreamName(streamName)
 
-      } else {
-        log.error(s"Start: cannot find stream $streamName")
+      describeStreamResponse = amazonKinesisClient.describeStream(describeStreamRequest)
+      val streamStatus = describeStreamResponse.getStreamDescription().getStreamStatus()
+      log.info(s"Start: streamStatus = $streamStatus")
+
+      // We try to recover the last sequence numbers of our shards from S3
+      val shards = describeStreamResponse.getStreamDescription.getShards.toList
+      shards.foreach { shard =>
+        val shardId = shard.getShardId()
+        lastSequenceNumber(shardId) match {
+          case None =>
+            log.info("No archived segments found in S3")
+          case Some(lastSequenceNumber) =>
+            log.info(s"Recovered last sequence number $lastSequenceNumber from S3")
+            lastSequenceNumbers(shardId) = lastSequenceNumber
+         }
       }
+
+      context.system.scheduler.scheduleOnce(60 seconds, self, Pulse)
 
     case Pulse =>
       
@@ -129,12 +131,11 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       val shards = describeStreamResponse.getStreamDescription.getShards.toList
       shards.foreach { getRecords }
       
-      context.system.scheduler.scheduleOnce(10 seconds, self, Pulse)
+      context.system.scheduler.scheduleOnce(60 seconds, self, Pulse)
        
     case message: Any =>
       
       log.error("received unknown message = " + message)
-
   }
   
   def getRecords(shard: Shard) = {
@@ -148,24 +149,17 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
     val getShardIteratorRequest = new GetShardIteratorRequest()
     
     getShardIteratorRequest.setStreamName(streamName)
-    getShardIteratorRequest.setShardId(shard.getShardId())
+    getShardIteratorRequest.setShardId(shardId)
     
-    lastSequenceNumber(shardId) match {
-      case None =>
-        getShardIteratorRequest.setShardIteratorType("TRIM_HORIZON")
-        log.info("shardIteratorType = " + getShardIteratorRequest.getShardIteratorType)
-      case Some(lastSequenceNumber) =>
-        getShardIteratorRequest.setStartingSequenceNumber(lastSequenceNumber)
-        getShardIteratorRequest.setShardIteratorType("AFTER_SEQUENCE_NUMBER")
-        log.info("shardIteratorType = " + getShardIteratorRequest.getShardIteratorType + " " + lastSequenceNumber)
+    if (lastSequenceNumbers.contains(shardId)) {
+      val lastSequenceNumber = lastSequenceNumbers(shardId)
+      getShardIteratorRequest.setStartingSequenceNumber(lastSequenceNumber)
+      getShardIteratorRequest.setShardIteratorType("AFTER_SEQUENCE_NUMBER")
+      log.info("shardIteratorType = " + getShardIteratorRequest.getShardIteratorType + " " + lastSequenceNumber)
+    } else {
+      getShardIteratorRequest.setShardIteratorType("TRIM_HORIZON")
+      log.info("shardIteratorType = " + getShardIteratorRequest.getShardIteratorType)
     }
-    
-//    if (lastSequenceNumber == null)
-//      getShardIteratorRequest.setShardIteratorType("TRIM_HORIZON")
-//    else {
-//      getShardIteratorRequest.setStartingSequenceNumber(lastSequenceNumber)
-//      getShardIteratorRequest.setShardIteratorType("AFTER_SEQUENCE_NUMBER")
-//    }
 
     val getShardIteratorResult = amazonKinesisClient.getShardIterator(getShardIteratorRequest)
     val shardIterator = getShardIteratorResult.getShardIterator()
@@ -186,7 +180,7 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
     while (i.hasNext()) {
       val record = i.next()
       val partitionKey = record.getPartitionKey
-      lastSequenceNumber = record.getSequenceNumber
+      val lastSequenceNumber = record.getSequenceNumber
       log.info(s"Start: record = $record")
       val data = record.getData
       val f = new java.io.ByteArrayInputStream(data.array())
@@ -206,11 +200,14 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       
       stringBuilder.append(json).append('\n')
       if (stringBuilder.length > 1000000) {
-        val stream = new java.io.ByteArrayInputStream(stringBuilder.toString.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        val data = stringBuilder.toString.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        val stream = new java.io.ByteArrayInputStream(data);
         val metadata = new com.amazonaws.services.s3.model.ObjectMetadata
+        metadata.setContentLength(data.length)
         val date = simpleYearMonthDay.format(System.currentTimeMillis())
-        val key = date + "/" + shard.getShardId + "/" + lastSequenceNumber
+        val key = "segments/" + date + "/" + shard.getShardId + "/" + lastSequenceNumber
         amazonS3Client.putObject(bucketName, key, stream, metadata)
+        lastSequenceNumbers(shardId) = lastSequenceNumber
         log.info("writing S3 " + key)
         stringBuilder.clear
       }
@@ -266,6 +263,7 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
   def lastSequenceNumber(shardId: String) = {
     val listObjectsRequest = new com.amazonaws.services.s3.model.ListObjectsRequest
     listObjectsRequest.setBucketName(bucketName)
+    listObjectsRequest.setPrefix("segments/")
     listObjectsRequest.setDelimiter("/")
         
     var objectListing = amazonS3Client.listObjects(listObjectsRequest)
@@ -289,13 +287,17 @@ class KinesisConsumer extends Actor with ActorLogging with Configuration {
       listObjectsRequest.setPrefix(prefix)
       
       objectListing = amazonS3Client.listObjects(listObjectsRequest)
-      val lastSequenceNumber = objectListing.getObjectSummaries.toList.map {_.getKey }.max.substring(prefix.length)
+      val keys = objectListing.getObjectSummaries.toList.map {_.getKey }
+      if (keys.isEmpty) None
+      else {
+        val lastSequenceNumber = keys.max.substring(prefix.length)
+
+        log.info("---------------------------------------------")
+        objectListing.getObjectSummaries.toList.foreach { objectSummary => log.info(objectSummary.getKey) }
+        log.info("---------------------------------------------")
       
-      log.info("---------------------------------------------")
-      objectListing.getObjectSummaries.toList.foreach { objectSummary => log.info(objectSummary.getKey) }
-      log.info("---------------------------------------------")
-      
-      Some(lastSequenceNumber)
+        Some(lastSequenceNumber)
+      }
     }
   }
   

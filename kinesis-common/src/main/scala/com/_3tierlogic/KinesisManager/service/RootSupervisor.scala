@@ -65,6 +65,7 @@ class RootSupervisor extends Actor with ActorLogging with Configuration {
   
 //  lazy val kinesisProducer = actorRefForName("com._3tierlogic.KinesisManager.producer.KinesisProducer")
 //  lazy val kinesisConsumer = actorRefForName("com._3tierlogic.KinesisManager.consumer.KinesisConsumer")
+ 
   
   var actorsStarted = false
 
@@ -81,6 +82,8 @@ class RootSupervisor extends Actor with ActorLogging with Configuration {
       log.info("received ApplicationArguments")
 
     case Start =>
+      
+      StreamManager.actorRef ! Start
       
       val actorList = config.getList("kinesis-manager.actors").toList
       
